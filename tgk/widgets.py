@@ -246,6 +246,22 @@ class TermuxBackend:
         elif isinstance(node,ToggleButton):
             native=tg.ToggleButton(a,parent,checked=node.state=='down')
             native.sendclickevent(True)
+        elif isinstance(node,Slider):
+            native=tg.ImageView(a,parent)
+            native.sendtouchevent(True)
+            native.setheight(72)
+            native.setwidth(tg.View.MATCH_PARENT)
+            buffer=tg.Buffer(self.connection,512,72)
+            native.setbuffer(buffer)
+            memory=buffer.__enter__()
+            try:
+                from .canvas import Canvas
+                canvas=Canvas(memory,512,72)
+            except BaseException:
+                buffer.__exit__(None,None,None)
+                raise
+            self._slider_resources.append((node,buffer,canvas))
+            node._slider_draw=lambda: self._draw_slider(node,buffer,canvas)
         elif isinstance(node,Image):
             native=tg.ImageView(a,parent)
             if node.source:native.setimage(node._read_image())
@@ -259,6 +275,7 @@ class TermuxBackend:
         elif isinstance(node,ProgressBar):native=tg.ProgressBar(a,parent)
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
+        if isinstance(node,Slider):node._slider_draw()
         if isinstance(node,Label):native.settextsize(int(node.font_size))
         if isinstance(node,ProgressBar):native.setprogress(max(0,min(100,round(100*node.value/node.max if node.max else 0))))
         if hasattr(node,'height') and node.height is not None: native.setheight(int(node.height))
@@ -277,17 +294,71 @@ class TermuxBackend:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
         for child in node.children:self._make(child,native)
         return native
+    @staticmethod
+    def _draw_slider(node,buffer,canvas):
+        from .canvas import rgba
+        left,right=22,canvas.width-23
+        canvas.clear(rgba(22,27,45))
+        canvas.rect(left,32,right-left+1,8,rgba(77,86,112))
+        fraction=(node.value-node.min)/(node.max-node.min)
+        x=left+round((right-left)*fraction)
+        canvas.rect(left,32,max(1,x-left+1),8,rgba(48,205,233))
+        canvas.circle(x,36,15,rgba(255,255,255))
+        canvas.circle(x,36,9,rgba(75,68,210))
+        buffer.blit()
+        if node._native is not None:
+            node._native.refresh()
+
+    def _slider_touch(self,node,event):
+        if event.type!='touch':return
+        action=str(event.value.get('action','')).lower()
+        if action=='cancel':
+            node._drag_pointer=None
+            return
+        if action not in ('down','pointer_down','move','up','pointer_up'):
+            return
+        points=event.value.get('pointers',[])
+        if isinstance(points,dict):points=[points]
+        if isinstance(points,(list,tuple)) and points and isinstance(points[-1],(list,tuple)):
+            points=points[-1]
+        if not isinstance(points,(list,tuple)) or not points:
+            return
+        if action in ('down','pointer_down'):
+            if node._drag_pointer is not None:return
+            index=event.value.get('index',0)
+            if not isinstance(index,int) or index<0 or index>=len(points):index=0
+            chosen=points[index]
+            if not isinstance(chosen,dict):return
+            node._drag_pointer=chosen.get('id',0)
+        else:
+            chosen=next((p for p in points if isinstance(p,dict) and
+                         p.get('id',0)==node._drag_pointer),None)
+            if chosen is None:return
+        try:
+            x=float(chosen['x'])
+            view_width=float(node._native.getdimensions()[0])
+        except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+            return
+        if not math.isfinite(x) or not math.isfinite(view_width) or view_width<=0:
+            return
+        fraction=max(0.0,min(1.0,(x/view_width*512-22)/(512-23-22)))
+        node.value=node.min+(node.max-node.min)*fraction
+        if action in ('up','pointer_up'):
+            node._drag_pointer=None
+
     def render(self,root):
         return self._make(root,None)
     def event(self,e):
         if e.type=='back':self.activity.finish();return
         if e.type=='destroy':return
-        if e.type not in ('click','text','itemselected'):return
+        if e.type not in ('click','text','itemselected','touch'):return
         match=e.value.get('id')
         for node in self.nodes:
             # Termux:GUI Python bindings implement native view == numerical ID.
             if match!=node._native:continue
-            if e.type=='itemselected' and isinstance(node,Spinner):
+            if e.type=='touch' and isinstance(node,Slider):
+                self._slider_touch(node,e)
+            elif e.type=='itemselected' and isinstance(node,Spinner):
                 node.text=str(e.value.get('selected',''))
             elif e.type=='click':
                 if isinstance(node,ToggleButton) and 'set' in e.value:
@@ -320,6 +391,13 @@ class TermuxBackend:
                     if event is None:
                         time.sleep(0.01)
             finally:
+                # Relinquish C's exported mmap reference before closing the buffer.
+                for slider,buffer,canvas in reversed(self._slider_resources):
+                    slider._slider_draw=None
+                    slider._drag_pointer=None
+                    canvas.close()
+                    buffer.__exit__(None,None,None)
+                self._slider_resources.clear()
                 self.nodes.clear()
                 for node in root.walk():
                     node._native=None
