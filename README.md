@@ -19,7 +19,7 @@ cd tgk
 python examples/demo.py
 ```
 
-The installer builds `tgk/libtgk.so` **on your device** for its ABI, installs TGK in editable mode, and enables a reversible Kivy import hook. To avoid enabling the hook globally, run `./install.sh --no-auto`; to enable it later run `python -m tgk.install_hook`.
+The installer builds `tgk/libtgk.so` **on your device** for its ABI and enables a reversible Kivy import hook. By default it installs in **editable mode**: keep the cloned `tgk` directory. If you want a standalone installation and to remove the source checkout afterwards, use `./install.sh --copy`. You can combine `--copy` with `--no-auto` to avoid installing the Kivy startup hook. To enable it later run `python -m tgk.install_hook`. Both modes verify that the C library loads after installation.
 
 ```sh
 # Temporarily use normal Kivy instead of TGK
@@ -64,6 +64,17 @@ canvas.close()
 ```
 
 Buffers are non-copying writable RGBA8888 views; C uses checked bounds and alpha compositing. APIs: `clear`, `rect`, `circle`, `line`, `gradient`, `map_touch`. Termux:GUI shared buffers (`tg.Buffer`) can be rendered with the same `Canvas`; call `buffer.blit()` and `image.refresh()` after modifications. Keep buffer views from outliving the memory mapping.
+
+### Verify that installation worked
+
+```sh
+# From any directory, verifies C shared library is available
+python -c "from tgk.canvas import _lib; _lib(); print('TGK renderer OK')"
+# After installing tgk-tools, verifies the native Android connection
+tgk doctor --connect
+```
+
+A successful Linux CI run does not verify the Android plugin connection, which needs hardware/device testing. Avoid downloading a Linux-built `.so` for Termux: `install.sh` compiles for the current device.
 
 ## Shell tools
 
