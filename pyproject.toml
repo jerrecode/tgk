@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tgk"
+version = "0.2.0"
+description = "Native Termux:GUI widgets, C canvas, KV subset, and selective Kivy import bridge"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["termux", "android", "gui", "kivy", "kv"]
+
+[tool.setuptools.packages.find]
+include = ["tgk*"]
+[tool.setuptools.package-data]
+tgk = ["native/*.c", "libtgk.so"]

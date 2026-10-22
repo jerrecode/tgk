@@ -1,0 +1,5 @@
+# TGK contributor/agent instructions
+
+Maintain a native Android-widget-first architecture, using C for hot pixel loops. Keep TGK the framework; put general-purpose CLI applications in `jerrecode/tgk-tools`. Preserve compatibility API names for supported Kivy modules, but **never claim full Kivy equivalence**. Run `make check` before proposing changes. On CI regression, diagnose root causes rather than blindly rerun. PR review must inspect correctness, input handling, backwards compatibility, performance, and shell safety. Do not auto-merge without checks and explicit branch protections.
+
+Priority backlog: real Android end-to-end runs on ARM64; touch coordinate transform configuration; dirty-rectangle redraw and frame pacing; more robust event dispatch; layout sizing and ScrollView text wrapping; accelerated SurfaceView/Vulkan exploration; KV binding graph (safely parsed AST); adding missing Kivy modules deliberately with coverage; performance regression thresholds; PyPI optional release packaging. Verify actual `termuxgui` API versions on target device; only build ABI-specific shared objects on that device.

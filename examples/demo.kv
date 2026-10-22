@@ -1,0 +1,27 @@
+BoxLayout:
+    orientation: 'vertical'
+    padding: 12
+    Label:
+        id: status
+        text: 'Termux GUI + C / KV compatibility'
+        font_size: 22
+        height: 80
+    TextInput:
+        id: usertext
+        text: 'Hello from Termux'
+        multiline: False
+        height: 60
+    Button:
+        text: 'Update label'
+        height: 60
+        on_release: app.update_status()
+    CheckBox:
+        id: enabled
+        text: 'Enable option'
+        active: True
+    ProgressBar:
+        value: 65
+    Button:
+        text: 'Close'
+        height: 56
+        on_release: app.stop()
