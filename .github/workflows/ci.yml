@@ -22,6 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build with UBSan
-        run: make build CC=clang CFLAGS='-O1 -g -std=c11 -fPIC -shared -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all'
+        run: make build CC=gcc CFLAGS='-O1 -g -std=c11 -fPIC -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all'
       - name: Run native tests
         run: python3 -m unittest discover -s tests -v
