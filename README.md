@@ -15,11 +15,11 @@ python -m pip install termuxgui setuptools
 # Optional but recommended: use a Python virtual environment to isolate the Kivy shim.
 git clone https://github.com/jerrecode/tgk.git
 cd tgk
-./install.sh
+sh ./install.sh
 python examples/demo.py
 ```
 
-The installer builds `tgk/libtgk.so` **on your device** for its ABI and enables a reversible Kivy import hook. By default it installs in **editable mode**: keep the cloned `tgk` directory. If you want a standalone installation and to remove the source checkout afterwards, use `./install.sh --copy`. You can combine `--copy` with `--no-auto` to avoid installing the Kivy startup hook. To enable it later run `python -m tgk.install_hook`. Both modes verify that the C library loads after installation.
+The installer builds `tgk/libtgk.so` **on your device** for its ABI and enables a reversible Kivy import hook. By default it installs in **editable mode**: keep the cloned `tgk` directory. If you want a standalone installation and to remove the source checkout afterwards, use `sh ./install.sh --copy`. You can combine `--copy` with `--no-auto` to avoid installing the Kivy startup hook. To enable it later run `python -m tgk.install_hook`. Both modes verify that the C library loads after installation.
 
 ```sh
 # Temporarily use normal Kivy instead of TGK
