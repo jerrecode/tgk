@@ -9,6 +9,7 @@ import copy
 import heapq
 import itertools
 import logging
+import math
 import time
 from collections import defaultdict
 
@@ -42,6 +43,9 @@ class EventDispatcher:
         object.__setattr__(self,name,value)
         if previous != value:
             for callback in tuple(self._bindings.get(name, [])):
+                callback(self,value)
+            # Kivy's on_value: property callbacks are distinct from bind(value=...).
+            for callback in tuple(self._bindings.get('on_'+name, [])):
                 callback(self,value)
             handler = getattr(self, 'on_'+name, None)
             if callable(handler): handler(self,value)
@@ -77,7 +81,7 @@ class Widget(EventDispatcher):
         if type(self).__name__ not in (
             'Widget','BoxLayout','GridLayout','FloatLayout','ScrollView','Label',
             'Button','TextInput','CheckBox','Switch','ProgressBar','Image','Spinner',
-            'ToggleButton'):
+            'ToggleButton','Slider'):
             from .kv import Builder
             Builder.apply(self)
     def add_widget(self,widget,*args,**kwargs):
@@ -108,6 +112,9 @@ class Widget(EventDispatcher):
             n.setlist([str(v) for v in value])
         if name=='value' and isinstance(self,ProgressBar):
             n.setprogress(max(0,min(100,round(100*value/self.max if self.max else 0))))
+        if isinstance(self,Slider) and name in ('value','min','max','step'):
+            if self._slider_draw is not None:
+                self._slider_draw()
     def _read_image(self):
         from pathlib import Path
         path=Path(getattr(self,'source',''))
@@ -149,6 +156,37 @@ class ToggleButton(Button):
 class ProgressBar(Widget):
     def __init__(self,value=0,max=100,**kwargs):super().__init__(value=value,max=max,**kwargs)
 
+class Slider(Widget):
+    """Interactive horizontal slider (C raster + Termux:GUI ImageView touch).
+
+    Values are independent of framebuffer resolution; step=0 is continuous.
+    A native Android SeekBar isn't exposed by the current Termux:GUI protocol.
+    """
+    def __init__(self,min=0,max=100,value=0,step=0,**kwargs):
+        if not all(math.isfinite(float(n)) for n in (min,max,value,step)):
+            raise ValueError('Slider values must be finite')
+        if float(max)<=float(min) or float(step)<0:
+            raise ValueError('Slider requires max > min and step >= 0')
+        object.__setattr__(self,'_slider_draw',None)
+        object.__setattr__(self,'_drag_pointer',None)
+        super().__init__(min=float(min),max=float(max),step=float(step),value=float(value),**kwargs)
+        self.value=self._normalized(self.value)
+
+    def _normalized(self,value):
+        low,high=float(self.min),float(self.max)
+        if high<=low:
+            raise ValueError('Slider requires max > min')
+        result=max(low,min(high,float(value)))
+        if self.step:
+            result=low+round((result-low)/float(self.step))*float(self.step)
+        return max(low,min(high,result))
+
+    def __setattr__(self,name,value):
+        if name=='value' and '_bindings' in self.__dict__:
+            value=self._normalized(value)
+        super().__setattr__(name,value)
+
+
 class _Clock:
     def __init__(self):self._jobs=[];self._ids=itertools.count();self._cancel=set()
     def schedule_once(self,callback,timeout=0):
@@ -184,6 +222,7 @@ class TermuxBackend:
                 raise RuntimeError('pip install termuxgui on Termux; Termux:GUI Android plugin is also required') from exc
         self.tg=tg
         self.connection=None; self.activity=None;self.nodes=[]
+        self._slider_resources=[]
     def _make(self,node,parent):
         tg=self.tg;a=self.activity
         if isinstance(node,BoxLayout):
