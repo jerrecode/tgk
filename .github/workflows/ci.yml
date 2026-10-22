@@ -13,6 +13,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
+      - name: Install packaging test tools
+        run: python -m pip install setuptools wheel
       - name: Build and test
         run: make check
       - name: Install self-contained copy and smoke-test native renderer
@@ -27,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Install packaging test tools
+        run: python3 -m pip install setuptools wheel
       - name: Build with UBSan
         run: make build CC=gcc CFLAGS='-O1 -g -std=c11 -fPIC -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all'
       - name: Run native tests
