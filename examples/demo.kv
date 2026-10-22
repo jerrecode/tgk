@@ -19,7 +19,19 @@ BoxLayout:
         id: enabled
         text: 'Enable option'
         active: True
+    Label:
+        id: slider_status
+        text: 'Level: 65'
+        height: 42
+    Slider:
+        id: level
+        min: 0
+        max: 100
+        step: 1
+        value: 65
+        on_value: app.update_slider(self.value)
     ProgressBar:
+        id: level_progress
         value: 65
     Button:
         text: 'Close'
