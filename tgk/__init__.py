@@ -3,7 +3,7 @@ __version__ = '0.2.0'
 _EXPORTS={
     'App','Widget','BoxLayout','GridLayout','FloatLayout','ScrollView',
     'Label','Button','TextInput','CheckBox','Switch','ProgressBar','Clock',
-    'Image','Spinner','ToggleButton','EventDispatcher','StringProperty',
+    'Image','Spinner','ToggleButton','Slider','EventDispatcher','StringProperty',
     'NumericProperty','BooleanProperty','ObjectProperty','ListProperty',
     'DictProperty','OptionProperty','BoundedNumericProperty',
 }

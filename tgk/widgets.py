@@ -9,6 +9,7 @@ import copy
 import heapq
 import itertools
 import logging
+import math
 import time
 from collections import defaultdict
 
@@ -42,6 +43,9 @@ class EventDispatcher:
         object.__setattr__(self,name,value)
         if previous != value:
             for callback in tuple(self._bindings.get(name, [])):
+                callback(self,value)
+            # Kivy's on_value: property callbacks are distinct from bind(value=...).
+            for callback in tuple(self._bindings.get('on_'+name, [])):
                 callback(self,value)
             handler = getattr(self, 'on_'+name, None)
             if callable(handler): handler(self,value)
@@ -77,7 +81,7 @@ class Widget(EventDispatcher):
         if type(self).__name__ not in (
             'Widget','BoxLayout','GridLayout','FloatLayout','ScrollView','Label',
             'Button','TextInput','CheckBox','Switch','ProgressBar','Image','Spinner',
-            'ToggleButton'):
+            'ToggleButton','Slider'):
             from .kv import Builder
             Builder.apply(self)
     def add_widget(self,widget,*args,**kwargs):
@@ -108,6 +112,9 @@ class Widget(EventDispatcher):
             n.setlist([str(v) for v in value])
         if name=='value' and isinstance(self,ProgressBar):
             n.setprogress(max(0,min(100,round(100*value/self.max if self.max else 0))))
+        if isinstance(self,Slider) and name in ('value','min','max','step'):
+            if self._slider_draw is not None:
+                self._slider_draw()
     def _read_image(self):
         from pathlib import Path
         path=Path(getattr(self,'source',''))
@@ -149,6 +156,48 @@ class ToggleButton(Button):
 class ProgressBar(Widget):
     def __init__(self,value=0,max=100,**kwargs):super().__init__(value=value,max=max,**kwargs)
 
+class Slider(Widget):
+    """Interactive horizontal slider (C raster + Termux:GUI ImageView touch).
+
+    Values are independent of framebuffer resolution; step=0 is continuous.
+    A native Android SeekBar isn't exposed by the current Termux:GUI protocol.
+    """
+    def __init__(self,min=0,max=100,value=0,step=0,**kwargs):
+        if not all(math.isfinite(float(n)) for n in (min,max,value,step)):
+            raise ValueError('Slider values must be finite')
+        if float(max)<=float(min) or float(step)<0:
+            raise ValueError('Slider requires max > min and step >= 0')
+        object.__setattr__(self,'_slider_draw',None)
+        object.__setattr__(self,'_drag_pointer',None)
+        super().__init__(min=float(min),max=float(max),step=float(step),value=float(value),**kwargs)
+        self.value=self._normalized(self.value)
+
+    def _normalized(self,value):
+        low,high=float(self.min),float(self.max)
+        incoming=float(value)
+        if not all(math.isfinite(n) for n in (low,high,incoming,float(self.step))):
+            raise ValueError('Slider values must be finite')
+        if high<=low:
+            raise ValueError('Slider requires max > min')
+        result=max(low,min(high,incoming))
+        if self.step:
+            result=low+round((result-low)/float(self.step))*float(self.step)
+        return max(low,min(high,result))
+
+    def __setattr__(self,name,value):
+        if name in ('min','max','step') and '_bindings' in self.__dict__:
+            value=float(value)
+            if not math.isfinite(value) or (name=='step' and value<0):
+                raise ValueError('Slider bounds and step must be finite; step >= 0')
+            other={'min':'max','max':'min'}.get(name)
+            if other in self.__dict__:
+                if (name=='min' and value>=float(self.max)) or (name=='max' and value<=float(self.min)):
+                    raise ValueError('Slider requires max > min')
+        if name=='value' and '_bindings' in self.__dict__:
+            value=self._normalized(value)
+        super().__setattr__(name,value)
+
+
 class _Clock:
     def __init__(self):self._jobs=[];self._ids=itertools.count();self._cancel=set()
     def schedule_once(self,callback,timeout=0):
@@ -184,6 +233,7 @@ class TermuxBackend:
                 raise RuntimeError('pip install termuxgui on Termux; Termux:GUI Android plugin is also required') from exc
         self.tg=tg
         self.connection=None; self.activity=None;self.nodes=[]
+        self._slider_resources=[]
     def _make(self,node,parent):
         tg=self.tg;a=self.activity
         if isinstance(node,BoxLayout):
@@ -207,6 +257,22 @@ class TermuxBackend:
         elif isinstance(node,ToggleButton):
             native=tg.ToggleButton(a,parent,checked=node.state=='down')
             native.sendclickevent(True)
+        elif isinstance(node,Slider):
+            native=tg.ImageView(a,parent)
+            native.sendtouchevent(True)
+            native.setheight(72)
+            native.setwidth(tg.View.MATCH_PARENT)
+            buffer=tg.Buffer(self.connection,512,72)
+            native.setbuffer(buffer)
+            memory=buffer.__enter__()
+            try:
+                from .canvas import Canvas
+                canvas=Canvas(memory,512,72)
+            except BaseException:
+                buffer.__exit__(None,None,None)
+                raise
+            self._slider_resources.append((node,buffer,canvas))
+            node._slider_draw=lambda: self._draw_slider(node,buffer,canvas)
         elif isinstance(node,Image):
             native=tg.ImageView(a,parent)
             if node.source:native.setimage(node._read_image())
@@ -220,6 +286,7 @@ class TermuxBackend:
         elif isinstance(node,ProgressBar):native=tg.ProgressBar(a,parent)
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
+        if isinstance(node,Slider):node._slider_draw()
         if isinstance(node,Label):native.settextsize(int(node.font_size))
         if isinstance(node,ProgressBar):native.setprogress(max(0,min(100,round(100*node.value/node.max if node.max else 0))))
         if hasattr(node,'height') and node.height is not None: native.setheight(int(node.height))
@@ -238,17 +305,73 @@ class TermuxBackend:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
         for child in node.children:self._make(child,native)
         return native
+    @staticmethod
+    def _draw_slider(node,buffer,canvas):
+        from .canvas import rgba
+        left,right=22,canvas.width-23
+        canvas.clear(rgba(22,27,45))
+        canvas.rect(left,32,right-left+1,8,rgba(77,86,112))
+        fraction=(node.value-node.min)/(node.max-node.min)
+        x=left+round((right-left)*fraction)
+        canvas.rect(left,32,max(1,x-left+1),8,rgba(48,205,233))
+        canvas.circle(x,36,15,rgba(255,255,255))
+        canvas.circle(x,36,9,rgba(75,68,210))
+        buffer.blit()
+        if node._native is not None:
+            node._native.refresh()
+
+    def _slider_touch(self,node,event):
+        if event.type!='touch':return
+        action=str(event.value.get('action','')).lower()
+        if action=='cancel':
+            node._drag_pointer=None
+            return
+        if action not in ('down','pointer_down','move','up','pointer_up'):
+            return
+        points=event.value.get('pointers',[])
+        if isinstance(points,dict):points=[points]
+        if isinstance(points,(list,tuple)) and points and isinstance(points[-1],(list,tuple)):
+            points=points[-1]
+        if not isinstance(points,(list,tuple)) or not points:
+            if action in ('up','pointer_up'):
+                node._drag_pointer=None
+            return
+        if action in ('down','pointer_down'):
+            if node._drag_pointer is not None:return
+            index=event.value.get('index',0)
+            if not isinstance(index,int) or index<0 or index>=len(points):index=0
+            chosen=points[index]
+            if not isinstance(chosen,dict):return
+            node._drag_pointer=chosen.get('id',0)
+        else:
+            chosen=next((p for p in points if isinstance(p,dict) and
+                         p.get('id',0)==node._drag_pointer),None)
+            if chosen is None:return
+        try:
+            x=float(chosen['x'])
+            view_width=float(node._native.getdimensions()[0])
+        except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+            return
+        if not math.isfinite(x) or not math.isfinite(view_width) or view_width<=0:
+            return
+        fraction=max(0.0,min(1.0,(x/view_width*512-22)/(512-23-22)))
+        node.value=node.min+(node.max-node.min)*fraction
+        if action in ('up','pointer_up'):
+            node._drag_pointer=None
+
     def render(self,root):
         return self._make(root,None)
     def event(self,e):
         if e.type=='back':self.activity.finish();return
         if e.type=='destroy':return
-        if e.type not in ('click','text','itemselected'):return
+        if e.type not in ('click','text','itemselected','touch'):return
         match=e.value.get('id')
         for node in self.nodes:
             # Termux:GUI Python bindings implement native view == numerical ID.
             if match!=node._native:continue
-            if e.type=='itemselected' and isinstance(node,Spinner):
+            if e.type=='touch' and isinstance(node,Slider):
+                self._slider_touch(node,e)
+            elif e.type=='itemselected' and isinstance(node,Spinner):
                 node.text=str(e.value.get('selected',''))
             elif e.type=='click':
                 if isinstance(node,ToggleButton) and 'set' in e.value:
@@ -281,6 +404,13 @@ class TermuxBackend:
                     if event is None:
                         time.sleep(0.01)
             finally:
+                # Relinquish C's exported mmap reference before closing the buffer.
+                for slider,buffer,canvas in reversed(self._slider_resources):
+                    slider._slider_draw=None
+                    slider._drag_pointer=None
+                    canvas.close()
+                    buffer.__exit__(None,None,None)
+                self._slider_resources.clear()
                 self.nodes.clear()
                 for node in root.walk():
                     node._native=None

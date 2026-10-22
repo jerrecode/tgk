@@ -12,6 +12,7 @@ _SUPPORTED={
  'kivy.uix.label','kivy.uix.button','kivy.uix.textinput',
  'kivy.uix.checkbox','kivy.uix.switch','kivy.uix.progressbar',
  'kivy.uix.image','kivy.uix.spinner','kivy.uix.togglebutton',
+ 'kivy.uix.slider',
  'kivy.clock','kivy.lang','kivy.factory','kivy.event','kivy.properties',
  'kivy.metrics','kivy.core','kivy.core.window',
 }
@@ -45,6 +46,7 @@ def _resolve(fullname):
         'button':'Button','textinput':'TextInput','checkbox':'CheckBox',
         'switch':'Switch','progressbar':'ProgressBar','image':'Image',
         'spinner':'Spinner','togglebutton':'ToggleButton',
+        'slider':'Slider',
     }
     cls=widget_map.get(widget_name)
     if cls is None:raise ImportError(f'Unsupported TGK Kivy module: {fullname}')
