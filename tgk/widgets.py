@@ -174,14 +174,25 @@ class Slider(Widget):
 
     def _normalized(self,value):
         low,high=float(self.min),float(self.max)
+        incoming=float(value)
+        if not all(math.isfinite(n) for n in (low,high,incoming,float(self.step))):
+            raise ValueError('Slider values must be finite')
         if high<=low:
             raise ValueError('Slider requires max > min')
-        result=max(low,min(high,float(value)))
+        result=max(low,min(high,incoming))
         if self.step:
             result=low+round((result-low)/float(self.step))*float(self.step)
         return max(low,min(high,result))
 
     def __setattr__(self,name,value):
+        if name in ('min','max','step') and '_bindings' in self.__dict__:
+            value=float(value)
+            if not math.isfinite(value) or (name=='step' and value<0):
+                raise ValueError('Slider bounds and step must be finite; step >= 0')
+            other={'min':'max','max':'min'}.get(name)
+            if other in self.__dict__:
+                if (name=='min' and value>=float(self.max)) or (name=='max' and value<=float(self.min)):
+                    raise ValueError('Slider requires max > min')
         if name=='value' and '_bindings' in self.__dict__:
             value=self._normalized(value)
         super().__setattr__(name,value)
@@ -322,6 +333,8 @@ class TermuxBackend:
         if isinstance(points,(list,tuple)) and points and isinstance(points[-1],(list,tuple)):
             points=points[-1]
         if not isinstance(points,(list,tuple)) or not points:
+            if action in ('up','pointer_up'):
+                node._drag_pointer=None
             return
         if action in ('down','pointer_down'):
             if node._drag_pointer is not None:return
