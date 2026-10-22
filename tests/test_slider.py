@@ -45,6 +45,10 @@ class SliderTests(unittest.TestCase):
         self.assertEqual(kv,[45,80])
         with self.assertRaises(ValueError):Slider(min=100,max=100)
         with self.assertRaises(ValueError):Slider(step=-1)
+        with self.assertRaises(ValueError):slider.value=float('nan')
+        with self.assertRaises(ValueError):slider.value=float('inf')
+        with self.assertRaises(ValueError):setattr(slider,'max',20)
+        with self.assertRaises(ValueError):setattr(slider,'step',float('nan'))
 
     def test_touch_drags_update_and_cleanup(self):
         slider=Slider(min=0,max=100,value=25,step=1)
