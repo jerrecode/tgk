@@ -25,7 +25,11 @@ done
 
 command -v "$CC" >/dev/null 2>&1 || { echo 'Missing C compiler: pkg install clang' >&2; exit 1; }
 command -v "$PYTHON" >/dev/null 2>&1 || { echo 'Missing Python: pkg install python' >&2; exit 1; }
-"$PYTHON" -c 'import pip, setuptools' 2>/dev/null || {
+"$PYTHON" -m pip --version >/dev/null || {
+  echo 'Missing pip for the selected Python interpreter' >&2
+  exit 1
+}
+"$PYTHON" -c 'import setuptools.build_meta' || {
   echo 'Missing Python build tools: python -m pip install setuptools' >&2
   exit 1
 }
