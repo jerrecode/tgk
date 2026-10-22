@@ -9,7 +9,7 @@ jobs:
       matrix:
         python: ["3.10", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
@@ -26,7 +26,7 @@ jobs:
   native-sanitizers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build with UBSan
         run: make build CC=gcc CFLAGS='-O1 -g -std=c11 -fPIC -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all'
       - name: Run native tests
