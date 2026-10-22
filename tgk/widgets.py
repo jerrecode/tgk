@@ -267,19 +267,25 @@ class TermuxBackend:
         with self.tg.Connection() as c:
             self.connection=c
             self.activity=self.tg.Activity(c,intercept=True)
-            self.render(root)
-            if on_start: on_start()
-            running=True
-            while running:
-                event=c.checkevent()
-                if event is not None:
-                    self.event(event)
-                    if event.type=='destroy' and event.value.get('finishing',False):running=False
-                Clock.tick()
-                if event is None:time.sleep(0.01)
-            self.nodes.clear()
-            for node in root.walk():node._native=None
-            self.activity=None;self.connection=None
+            try:
+                self.render(root)
+                if on_start: on_start()
+                running=True
+                while running:
+                    event=c.checkevent()
+                    if event is not None:
+                        self.event(event)
+                        if event.type=='destroy' and event.value.get('finishing',False):
+                            running=False
+                    Clock.tick()
+                    if event is None:
+                        time.sleep(0.01)
+            finally:
+                self.nodes.clear()
+                for node in root.walk():
+                    node._native=None
+                self.activity=None
+                self.connection=None
 
 class App(EventDispatcher):
     _running_app=None

@@ -148,6 +148,38 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(app.root.ids.status.text,'Done')
         self.assertIsNone(app.root.ids.status._native)
 
+
+    def test_backend_cleans_up_after_event_exception(self):
+        FakeTG.events = []
+        FakeTG.views = []
+        FakeTG.count = 0
+        root = Label(text='Test cleanup')
+        backend = TermuxBackend(tg=FakeTG)
+        def explode(_views):
+            raise RuntimeError('event failure')
+        FakeTG.events = [explode]
+        with self.assertRaisesRegex(RuntimeError,'event failure'):
+            backend.run(root)
+        self.assertIsNone(root._native)
+        self.assertIsNone(backend.activity)
+        self.assertIsNone(backend.connection)
+        self.assertEqual(backend.nodes, [])
+
+    def test_backend_cleans_up_after_start_exception(self):
+        FakeTG.events = []
+        FakeTG.views = []
+        FakeTG.count = 0
+        root = Label(text='Test failed start')
+        backend = TermuxBackend(tg=FakeTG)
+        def on_start():
+            raise RuntimeError('startup failure')
+        with self.assertRaisesRegex(RuntimeError,'startup failure'):
+            backend.run(root,on_start)
+        self.assertIsNone(root._native)
+        self.assertIsNone(backend.activity)
+        self.assertIsNone(backend.connection)
+        self.assertEqual(backend.nodes, [])
+
 class ImportHookTests(unittest.TestCase):
     def test_nested_transitive_import_with_pth(self):
         with tempfile.TemporaryDirectory() as tmp:
