@@ -347,14 +347,18 @@ class TermuxBackend:
             chosen=next((p for p in points if isinstance(p,dict) and
                          p.get('id',0)==node._drag_pointer),None)
             if chosen is None:return
+        # ImageView touch coordinates are already expressed in its image/buffer
+        # pixel space by Termux:GUI. Scaling them with getdimensions() again
+        # moves the thumb away from the finger on high-density screens.
         try:
             x=float(chosen['x'])
-            view_width=float(node._native.getdimensions()[0])
-        except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+        except (ValueError,TypeError,KeyError,OverflowError):
             return
-        if not math.isfinite(x) or not math.isfinite(view_width) or view_width<=0:
+        if not math.isfinite(x):
             return
-        fraction=max(0.0,min(1.0,(x/view_width*512-22)/(512-23-22)))
+        # Keep the track endpoints identical to those used by _draw_slider.
+        left,right=22,512-23
+        fraction=max(0.0,min(1.0,(x-left)/(right-left)))
         node.value=node.min+(node.max-node.min)*fraction
         if action in ('up','pointer_up'):
             node._drag_pointer=None
