@@ -18,7 +18,7 @@ jobs:
       - name: Install self-contained copy and smoke-test native renderer
         run: |
           python -m pip install setuptools
-          ./install.sh --copy --no-auto
+          sh ./install.sh --copy --no-auto
           cd /tmp
           python -c "from tgk.canvas import _lib; _lib(); print('TGK copied installation OK')"
       - name: Inspect shell installer
