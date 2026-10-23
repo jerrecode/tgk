@@ -155,6 +155,77 @@ def load_config(path=None):
     return validate_config(profile)
 
 
+def clear_config_cache():
+    """Refresh cached configuration after external edits or a local update."""
+    _load_cached.cache_clear()
+
+
+def update_config(section,key,value):
+    """Atomically replace one validated config field; keep all other fields.
+
+    The existing file is never replaced if validation or serialization fails.
+    No user preset file is overwritten. For concurrent writers use one process
+    or an external lock; this method prevents torn writes, not lost updates.
+    """
+    _safe_name(section)
+    _safe_name(key)
+    if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
+        raise ValueError("unknown TGK config section: "+section)
+    if key not in DEFAULT_CONFIG[section]:
+        raise ValueError("unknown TGK config field: "+section+"."+key)
+    directory=config_home()
+    path=config_path()
+    if directory.is_symlink() or path.is_symlink():
+        raise ValueError("refuse symlink TGK configuration target")
+    if not path.is_file():
+        raise FileNotFoundError("run python -m tgk.config init before editing")
+    # Preserve unknown data rejection and the current persisted fields.
+    stored=_read_json(path)
+    merged=deepcopy(DEFAULT_CONFIG)
+    _merge(merged,stored)
+    merged[section][key]=value
+    validate_config(merged)
+    # Validate selected preset before writing; a syntactically valid name
+    # without an installed profile must not poison the active config file.
+    option_config(merged["ui"]["option_profile"])
+    from .theme import PRESETS as THEMES,load_theme
+    theme_name=merged["ui"]["theme"]
+    theme_file=config_home()/"palettes"/(theme_name+".json")
+    if theme_file.is_file():load_theme(theme_file)
+    elif theme_name not in THEMES:raise ValueError("unknown theme preset "+theme_name)
+    from .typography import PRESETS as TEXT_PRESETS
+    text_name=merged["ui"]["text_style"]
+    text_file=config_home()/"text_styles"/(text_name+".json")
+    if text_file.is_file():
+        style_obj=_read_json(text_file)
+        if set(style_obj)-{"style","properties"} or not isinstance(style_obj.get("properties"),dict):
+            raise ValueError("invalid TGK text style preset")
+    elif text_name not in TEXT_PRESETS:raise ValueError("unknown text style "+text_name)
+    payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
+    if len(payload)>MAX_JSON_BYTES:raise ValueError("config would exceed size limit")
+    import tempfile
+    fd,temporary=tempfile.mkstemp(prefix=".tgk-config-",suffix=".tmp",dir=directory)
+    try:
+        with os.fdopen(fd,"wb") as out:
+            out.write(payload)
+            out.flush()
+            os.fsync(out.fileno())
+        os.chmod(temporary,0o600)
+        if path.is_symlink():
+            raise ValueError("refuse symlink TGK configuration target")
+        os.replace(temporary,path)
+        # Best-effort directory sync for durability after a crash.
+        try:
+            directory_fd=os.open(directory,os.O_RDONLY)
+            try:os.fsync(directory_fd)
+            finally:os.close(directory_fd)
+        except OSError:pass
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    clear_config_cache()
+    return load_config()
+
+
 def option_config(name):
     """Apply a named shipped option profile to defaults, without a write."""
     _safe_name(name)
@@ -249,12 +320,43 @@ def configured_io_limits():
 def main(argv=None):
     import argparse
     parser=argparse.ArgumentParser(description="Initialize/read persistent TGK configuration")
-    parser.add_argument("action",choices=("init","show","path","validate"),nargs="?",default="show")
+    parser.add_argument("action",choices=("init","show","path","validate",
+                                          "get","set","profiles"),nargs="?",default="show")
+    parser.add_argument("section",nargs="?")
+    parser.add_argument("key",nargs="?")
+    parser.add_argument("value",nargs="?")
     args=parser.parse_args(argv)
-    if args.action=="init":result=initialize_config()
-    elif args.action=="path":result={"path":str(config_path())}
-    elif args.action=="show":result=load_config()
-    else:result={"valid":True,"config":load_config()}
+    if args.action=="init":
+        if args.section is not None:parser.error("init takes no field arguments")
+        result=initialize_config()
+    elif args.action=="path":
+        result={"path":str(config_path())}
+    elif args.action=="show":
+        result=load_config()
+    elif args.action=="profiles":
+        result={"available":sorted(set(OPTIONS)|{
+            p.stem for p in (config_home()/"options").glob("*.json")
+            if p.is_file() and _SAFE_NAME.fullmatch(p.stem)})}
+    elif args.action in ("get","set"):
+        if args.section is None or args.key is None:
+            parser.error(args.action+" requires SECTION KEY")
+        if args.section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[args.section],dict):
+            parser.error("unknown config section: "+str(args.section))
+        if args.key not in DEFAULT_CONFIG[args.section]:
+            parser.error("unknown config key: "+str(args.section)+"."+str(args.key))
+        if args.action=="get":
+            if args.value is not None:parser.error("get accepts SECTION KEY only")
+            result={"section":args.section,"key":args.key,
+                    "value":load_config()[args.section][args.key]}
+        else:
+            if args.value is None:parser.error("set requires SECTION KEY JSON_VALUE")
+            try:value=json.loads(args.value)
+            except json.JSONDecodeError as exc:
+                parser.error("value must be JSON (quote JSON strings): "+str(exc))
+            try:result=update_config(args.section,args.key,value)
+            except (ValueError,FileNotFoundError) as exc:parser.error(str(exc))
+    else:
+        result={"valid":True,"config":load_config()}
     print(json.dumps(result,indent=2,sort_keys=True))
     return 0
 
