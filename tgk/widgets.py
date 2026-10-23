@@ -110,7 +110,13 @@ class Widget(EventDispatcher):
     def _update_native(self,name,value):
         n=self._native
         if n is None: return
-        if name=='text' and hasattr(n,'settext'): n.settext(str(value))
+        if name=='text' and hasattr(n,'settext'):
+            # Android EditText already owns the insertion point during an
+            # input event. settext() here resets the caret and IME composing
+            # region on some keyboards.
+            if not (isinstance(self,TextInput) and
+                    self.__dict__.get('_native_text_event')==str(value)):
+                n.settext(str(value))
         if name=='font_size' and hasattr(n,'settextsize'):
             n.settextsize(int(value))
             self._applied_native_style['font_size']=int(value)
@@ -707,10 +713,18 @@ class TermuxBackend:
         if requested_width is not None:native.setwidth(int(math.ceil(requested_width)))
         if node.parent is None:
             # Fill the Activity content viewport instead of leaving a
-            # WRAP_CONTENT gap showing the old startup window color. The
-            # protocol accepts the literal constant even with simple mocks.
+            # WRAP_CONTENT gap showing the old startup window color.
             if not hasattr(node,'width'):native.setwidth('MATCH_PARENT')
             if not hasattr(node,'height'):native.setheight('MATCH_PARENT')
+        elif isinstance(node.parent,(ScreenManager,TabbedPanel,FloatLayout)):
+            # FrameLayout does not assign remaining space to children: its
+            # default WRAP_CONTENT leads to zero-height/overlapping pages.
+            if not hasattr(node,'width'):native.setwidth('MATCH_PARENT')
+            if not hasattr(node,'height'):native.setheight('MATCH_PARENT')
+        elif isinstance(node.parent,ScrollView):
+            # NestedScrollView children must fill width, but retain their
+            # natural height to allow scrolling without clipping.
+            if not hasattr(node,'width'):native.setwidth('MATCH_PARENT')
         if isinstance(node.parent,BoxLayout):
             weight=getattr(node,'weight',None)
             if weight is not None and (isinstance(weight,bool) or not isinstance(weight,int) or weight<0):
@@ -745,6 +759,12 @@ class TermuxBackend:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
         if component is not None and component.margin_dp:
             native.setmargin(int(component.margin_dp))
+        if isinstance(node.parent,ScreenManager):
+            # Prevent hidden pages flashing as the native tree is constructed
+            # before ScreenManager._sync runs at the end of the render pass.
+            current=node.parent.current or (node.parent.children[0].name
+                         if node.parent.children else None)
+            native.setvisibility(2 if node.name==current else 0)
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
         self._apply_size_spec(node)
@@ -881,14 +901,28 @@ class TermuxBackend:
                 val=e.value.get('text')
                 if val is None:
                     val=node._native.gettext()
-                node.text=str(val)
+                object.__setattr__(node,'_native_text_event',str(val))
+                try:node.text=str(val)
+                finally:node.__dict__.pop('_native_text_event',None)
     def run(self,root,on_start=None):
         with self.tg.Connection() as c:
             self.connection=c
             options={'intercept':True}
             if self.window_mode=='dialog':options['dialog']=True
             if self.window_mode=='overlay':options['overlay']=True
-            self.activity=self.tg.Activity(c,**options)
+            try:
+                self.activity=self.tg.Activity(c,**options)
+            except (TypeError,ValueError) as exc:
+                if self.window_mode!='overlay' or not getattr(self,'overlay_fallback',False):
+                    if self.window_mode=='overlay':
+                        raise RuntimeError(
+                            'Termux:GUI rejected overlay Activity creation; '
+                            'check Display over other apps permission and the '
+                            'plugin version, or select --mode normal.'
+                        ) from exc
+                    raise
+                log.warning('Termux:GUI overlay unavailable (%s); using normal Activity',exc)
+                self.activity=self.tg.Activity(c,intercept=True)
             try:
                 if self.orientation_mode in ('portrait','landscape'):
                     change=getattr(self.activity,'setorientation',None)
@@ -948,6 +982,9 @@ class App(EventDispatcher):
         from .config import load_config,configured_layout_scale
         runtime=load_config()
         self.window_mode=kwargs.pop('window_mode',runtime['ui']['window_mode'])
+        self.overlay_fallback=kwargs.pop('overlay_fallback',False)
+        if type(self.overlay_fallback) is not bool:
+            raise TypeError('overlay_fallback must be bool')
         self.orientation_mode=kwargs.pop('orientation_mode',runtime['ui']['orientation'])
         from .adaptive import LayoutScale
         self.layout_scale=kwargs.pop('layout_scale',None) or configured_layout_scale()
@@ -999,6 +1036,7 @@ class App(EventDispatcher):
                                         window_mode=self.window_mode,
                                         layout_scale=self.layout_scale)
             self._backend.orientation_mode=self.orientation_mode
+            self._backend.overlay_fallback=self.overlay_fallback
             self._backend.clock_callbacks_per_tick=self.clock_callbacks_per_tick
             self._backend.idle_sleep_seconds=self.idle_sleep_seconds
             self._backend.run(self.root,self.on_start)
