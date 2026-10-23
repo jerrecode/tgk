@@ -266,6 +266,45 @@ def validate_installation():
             "palettes":len(colors),"text_presets":len(fonts),
             "option_presets":len(opts)}
 
+def set_defaults(*,palette=None,typography=None,options=None,
+                 orientation=None,window_mode=None):
+    """Atomically persist default choices; preserve unrelated configuration."""
+    choices={"palette":palette,"typography":typography,"options":options}
+    ui={"orientation":orientation,"window_mode":window_mode}
+    if all(v is None for v in (*choices.values(),*ui.values())):
+        raise ValueError("no changes specified")
+    raw=_read_json(paths()["config"]) or default_config()
+    registries={"palette":color_registry(),"typography":text_registry(),
+                "options":option_registry()}
+    for field,value in choices.items():
+        if value is not None:
+            if value not in registries[field]:raise ValueError("unknown "+field+" preset")
+            raw.setdefault("defaults",{})[field]=value
+    for field,value in ui.items():
+        if value is not None:raw.setdefault("ui",{})[field]=value
+    cfg=default_config()
+    for name in ("defaults","ui","runtime","io","render","icons"):
+        cfg[name].update(raw.get(name,{}))
+    _validate_config(cfg)
+    result=(json.dumps(raw,sort_keys=True,indent=2,ensure_ascii=False)+"\n").encode("utf-8")
+    if len(result)>FILE_LIMIT:raise ValueError("TGK config exceeds byte limit")
+    path=paths()["config"]
+    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if path.is_symlink():raise ValueError("refusing config symlink")
+    import tempfile
+    fd,temp=tempfile.mkstemp(prefix=".tgk-config-",dir=path.parent)
+    try:
+        with os.fdopen(fd,"wb") as handle:
+            os.fchmod(handle.fileno(),0o600)
+            handle.write(result);handle.flush();os.fsync(handle.fileno())
+        os.replace(temp,path)
+    finally:
+        try:os.unlink(temp)
+        except FileNotFoundError:pass
+    clear_cache()
+    return validate_installation()
+
+
 def clear_cache():
     _cache_for_root.cache_clear()
     _validated_color_registry.cache_clear()
