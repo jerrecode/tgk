@@ -185,6 +185,22 @@ def update_config(section,key,value):
     _merge(merged,stored)
     merged[section][key]=value
     validate_config(merged)
+    # Validate selected preset before writing; a syntactically valid name
+    # without an installed profile must not poison the active config file.
+    option_config(merged["ui"]["option_profile"])
+    from .theme import PRESETS as THEMES,load_theme
+    theme_name=merged["ui"]["theme"]
+    theme_file=config_home()/"palettes"/(theme_name+".json")
+    if theme_file.is_file():load_theme(theme_file)
+    elif theme_name not in THEMES:raise ValueError("unknown theme preset "+theme_name)
+    from .typography import PRESETS as TEXT_PRESETS
+    text_name=merged["ui"]["text_style"]
+    text_file=config_home()/"text_styles"/(text_name+".json")
+    if text_file.is_file():
+        style_obj=_read_json(text_file)
+        if set(style_obj)-{"style","properties"} or not isinstance(style_obj.get("properties"),dict):
+            raise ValueError("invalid TGK text style preset")
+    elif text_name not in TEXT_PRESETS:raise ValueError("unknown text style "+text_name)
     payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
     if len(payload)>MAX_JSON_BYTES:raise ValueError("config would exceed size limit")
     import tempfile
@@ -324,6 +340,10 @@ def main(argv=None):
     elif args.action in ("get","set"):
         if args.section is None or args.key is None:
             parser.error(args.action+" requires SECTION KEY")
+        if args.section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[args.section],dict):
+            parser.error("unknown config section: "+str(args.section))
+        if args.key not in DEFAULT_CONFIG[args.section]:
+            parser.error("unknown config key: "+str(args.section)+"."+str(args.key))
         if args.action=="get":
             if args.value is not None:parser.error("get accepts SECTION KEY only")
             result={"section":args.section,"key":args.key,
@@ -333,7 +353,8 @@ def main(argv=None):
             try:value=json.loads(args.value)
             except json.JSONDecodeError as exc:
                 parser.error("value must be JSON (quote JSON strings): "+str(exc))
-            result=update_config(args.section,args.key,value)
+            try:result=update_config(args.section,args.key,value)
+            except (ValueError,FileNotFoundError) as exc:parser.error(str(exc))
     else:
         result={"valid":True,"config":load_config()}
     print(json.dumps(result,indent=2,sort_keys=True))
