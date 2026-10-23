@@ -1,5 +1,5 @@
 """TGK public API; lazy imports keep the global site hook inexpensive."""
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 _EXPORTS={
     'App','Widget','BoxLayout','GridLayout','FloatLayout','ScrollView',
     'Label','Button','TextInput','CheckBox','Switch','ProgressBar','Clock',
@@ -37,6 +37,12 @@ def __getattr__(name):
                 'icon_for_path','icon_names','svg'):
         from importlib import import_module
         result=getattr(import_module('.icons',__name__),name)
+        globals()[name]=result
+        return result
+    if name in ('Limits','TransferResult','BoundedPool','transfer','copy_file',
+                'hash_file','download','ffprobe'):
+        from importlib import import_module
+        result=getattr(import_module('.io_pipeline',__name__),name)
         globals()[name]=result
         return result
     if name=='Builder':

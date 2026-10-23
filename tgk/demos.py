@@ -63,6 +63,8 @@ class Laboratory(App):
         self.levels=[]
         self.swatches=[]
         self._syncing_rgb=False
+        self._pending_rgb=None
+        self._requested_rgb=None
         super().__init__(**kwargs)
 
     def add_button(self,container,title,callback,**kwargs):
@@ -363,12 +365,25 @@ class Laboratory(App):
         self._refresh_palette()
 
     def update_rgb(self):
+        """Coalesce rapid drag events to ~30 palette refreshes per second."""
         if self._syncing_rgb or len(self.rgb_sliders)!=3 or not hasattr(self,"palette_name"):return
         channels=[int(slider.value) for slider in self.rgb_sliders]
-        value="#"+''.join(f"{v:02X}" for v in channels)
+        self._requested_rgb="#"+''.join(f"{v:02X}" for v in channels)
+        if self._backend is None or self._backend.activity is None:
+            # Keep offline previews/tests deterministic without a running Clock.
+            self._commit_rgb()
+        elif self._pending_rgb is None:
+            from .widgets import Clock
+            self._pending_rgb=Clock.schedule_once(lambda _dt:self._commit_rgb(),1/30)
+
+    def _commit_rgb(self):
+        self._pending_rgb=None
+        value=self._requested_rgb
+        if not value or value==self.theme["accent"]:return
         self.set_theme(self.theme,accent=value)
         for percent,swatch in self.swatches:
-            swatch.background_color=mix(self.theme["background"],value,percent/100)
+            new=mix(self.theme["background"],value,percent/100)
+            if swatch.background_color!=new:swatch.background_color=new
         self.palette_name.text="Custom accent "+value
         self.announce("Live accent "+value)
 

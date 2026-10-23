@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.2.0:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.3.0:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
 
 ## Install on Android/Termux
 
@@ -268,6 +268,59 @@ The lab contains five native tabs: navigation, icon gallery, rich typography,
 pan/zoom C canvas, and a nested screen stack. It also includes an in-Activity
 popup. This source is independently unit-tested on Linux, but Android
 touch/overlay/TabLayout behavior is awaiting **real hardware validation**.
+
+## Targeted theme repaint and resource-bounded data pipelines
+
+For Android drag responsiveness, a local `Widget.background_color` or
+`text_color` change now paints **only that widget**. Replacing a subtree
+`colors` dictionary repaints only its descendants; `App.set_theme`
+reevaluates the whole tree once. Each native View remembers its previously
+sent values so identical colors, font sizes, markup and C-buffer palettes do
+not trigger redundant IPC. The theme studio coalesces rapid RGB events to at
+most roughly **30 palette commits per second** while its Android event loop
+is running; the final drag value is applied. Previously 11 swatch updates
+could send O(11 × total_widgets) native requests. Regression tests count
+native setter invocations for a synthetic 160-label tree.
+
+Run the studio with your updated TGK installation:
+
+```sh
+python -m tgk.demos --demo 12_studio --theme ocean
+python examples/layout_lab.py --demo 13_workbench
+```
+
+TGK additionally exposes **opt-in, bounded standard-library I/O adapters**:
+
+```python
+from tgk.io_pipeline import Limits, BoundedPool, hash_file, copy_file, ffprobe
+lim=Limits(chunk_bytes=64*1024,max_bytes=100*1024*1024,
+           timeout=20,workers=2,pending=3)
+digest=hash_file("video.mp4",limits=lim)
+result=copy_file("video.mp4","video-copy.mp4",limits=lim)
+metadata=ffprobe("video.mp4",timeout=10)  # requires installed ffprobe
+with BoundedPool(lim) as workers:
+    futures=[workers.submit(hash_file,p,limits=lim) for p in ["a.bin","b.bin"]]
+    print([f.result().sha256 for f in futures])
+```
+
+`transfer()` copies between binary streams using fixed-size chunks, handles
+short writes, respects a byte cap/deadline/cancellation and calculates SHA-256
+incrementally. `copy_file()` writes a sibling temp file and commits using
+atomic rename; existing destinations require explicit `overwrite=True`.
+`hash_file()` does not read whole files into RAM. `download()` supports
+HTTPS by default with optional hostname restrictions and no redirects; HTTP
+requires deliberate `allow_http=True`. Do not treat hostnames as an SSRF
+firewall: callers using untrusted URLs should enforce DNS/IP/network
+allowlists separately. `ffprobe()` uses a subprocess argument list (never
+`shell=True`) for local file metadata, a protocol whitelist, a deadline and
+a bounded JSON result. It requires `pkg install ffmpeg` on Termux.
+
+`BoundedPool` uses a small, configurable thread pool with a bounded
+submission queue (not an unbounded task list). These primitives do **not**
+implement FTP, SSH, Telnet, SOCKS, SFTP, SMTP, Gopher, UDP, live media decoding,
+hardware video rendering or automatic multiprocessing. They are building
+blocks to integrate such opt-in plugins safely. Android throughput and
+power consumption remain unmeasured.
 
 ## Shell tools
 

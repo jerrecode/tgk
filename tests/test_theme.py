@@ -89,7 +89,7 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(button._native.foregrounds[-1],tgui_color('#123456'))
         button.background_color='#001122'
         self.assertEqual(button._native.backgrounds[-1],tgui_color('#ABCDEF'))
-        button._theme_hook=backend.apply_theme
+        button._theme_hook=lambda changed:backend.invalidate_style(button,changed)
         button.background_color='#445566'
         self.assertEqual(button._native.backgrounds[-1],tgui_color('#445566'))
 
