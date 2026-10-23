@@ -58,9 +58,7 @@ class PersistentConfigTests(unittest.TestCase):
         self.assertEqual(settings.read_text(encoding="utf-8"),'{"ui":{"theme":"ocean"}}')
         self.assertEqual(first["created"],[])
         self.assertEqual(len(first["preserved"]),first["total"])
-        if os.name=="posix":
-            self.assertEqual(settings.stat().st_mode&0o777,0o600 if False else
-                             settings.stat().st_mode&0o777)
+        self.assertTrue(settings.exists())
         created=self.dir/"text_styles"/"body.json"
         self.assertTrue(created.is_file())
 
