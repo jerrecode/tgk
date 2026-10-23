@@ -1,5 +1,5 @@
 """TGK public API; lazy imports keep the global site hook inexpensive."""
-__version__ = '0.5.0'
+__version__ = '0.6.0'
 _EXPORTS={
     'App','Widget','BoxLayout','GridLayout','ResponsiveGrid','FloatLayout','ScrollView',
     'Label','Button','TextInput','CheckBox','Switch','ProgressBar','Clock',
@@ -60,6 +60,15 @@ def __getattr__(name):
                 'recipe_for','render_svg','asset_key_for_path','build_assets'):
         from importlib import import_module
         result=getattr(import_module('.icon_builder',__name__),name)
+        globals()[name]=result
+        return result
+    if name in ('DEFAULT_CONFIG','OPTIONS','config_home','config_path',
+                'initialize_config','load_config','validate_config',
+                'configured_theme','configured_text_style',
+                'configured_layout_scale','configured_io_limits',
+                'option_config'):
+        from importlib import import_module
+        result=getattr(import_module('.config',__name__),name)
         globals()[name]=result
         return result
     if name=='Builder':

@@ -512,6 +512,67 @@ ZIP under that run's artifacts. All SVG samples are XML-validated in unit
 tests. Android native image controls still need PNG/JPEG bytes rather than
 SVG source: use the generated raster assets or a trusted on-device renderer.
 
+## Persistent TGK configuration (0.6.0)
+
+`sh ./install.sh --copy` or `--editable` installs the framework and
+**creates only missing** files in `${TGK_CONFIG_HOME}` or
+`${XDG_CONFIG_HOME:-~/.config}/tgk`. Reinstalling never replaces existing
+edits, even in a single preset. Every generated user file uses private
+permissions, and no config is written just by importing TGK.
+
+```
+~/.config/tgk/
+├── config.json              # default UI, layout, scheduler, I/O, icon, tool options
+├── palettes/                # one editable JSON file per built-in color scheme
+├── text_styles/             # editable H1–H5, body, code, data, meta etc. presets
+└── options/                 # balanced, battery_saver, performance, accessibility_touch ...
+```
+
+The config file contains explicit, schema-validated sections:
+
+```json
+{
+  "schema_version": 1,
+  "ui": {"theme":"ocean","text_style":"body",
+         "orientation":"system","window_mode":"normal"},
+  "layout": {"columns":12,"grid_unit_dp":4,"touch_target_dp":48,
+             "small_spacing_dp":8,"medium_spacing_dp":16,
+             "large_spacing_dp":24,"compact_margin_dp":16,
+             "medium_margin_dp":24,"expanded_margin_dp":32,
+             "max_content_width_dp":1200},
+  "runtime": {"clock_callbacks_per_tick":128,"idle_sleep_seconds":0.01},
+  "io": {"chunk_bytes":65536,"max_bytes":268435456,
+         "timeout":30.0,"workers":2,"pending":4},
+  "icons": {"low":32,"mid":96,"high":256,"raster":false,"max_icons":1500},
+  "tools": {"max_file_items":150,"max_progress_json_bytes":1048576,
+            "canvas_fps":30}
+}
+```
+
+**Precedence:** explicit `App(theme=...,text_style=...,layout_scale=...,
+orientation_mode=...,clock_callbacks_per_tick=...)` constructor values
+override installed defaults. CLI `--theme`, `--color`, `--text-style`,
+and font flags likewise have precedence. Without explicit overrides, TGK
+loads the selected editable palette and typography file on startup. On
+existing processes, already instantiated views are not retroactively
+updated when a JSON file is edited; call `App.set_theme()` for live palette
+changes or create a new App.
+
+```sh
+python -m tgk.config init       # create missing files; preserve edits
+python -m tgk.config show       # resolved, validated settings
+python -m tgk.config path       # active config file location
+python -m tgk.config validate   # strict bounds/types validation
+```
+
+`tgk.config.configured_io_limits()` returns validated limits for
+resource-bounded pipelines. Alternative presets are available through
+`tgk.config.option_config("battery_saver")`; they do not overwrite the
+persisted config until the user explicitly edits it. Config lookup is lazy
+and cached by file modification metadata to avoid JSON parsing in the UI
+render hot path. Hardware maximum refresh rate, physical resolution and
+system inset dimensions remain unknown unless provided by Android APIs.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
