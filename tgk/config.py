@@ -479,7 +479,7 @@ def audit_presets(root=None,*,max_files=2000,require_builtins=False):
 def main(argv=None):
     import argparse
     parser=argparse.ArgumentParser(description="Initialize/read persistent TGK configuration")
-    parser.add_argument("action",choices=("init","show","path","validate",
+    parser.add_argument("action",choices=("init","show","path","validate","audit",
                                           "get","set","reset","profiles"),nargs="?",default="show")
     parser.add_argument("section",nargs="?")
     parser.add_argument("key",nargs="?")
@@ -492,6 +492,8 @@ def main(argv=None):
         result={"path":str(config_path())}
     elif args.action=="show":
         result=load_config()
+    elif args.action=="audit":
+        result=audit_presets(require_builtins=True)
     elif args.action=="profiles":
         result={"available":sorted(set(OPTIONS)|{
             p.stem for p in (config_home()/"options").glob("*.json")
