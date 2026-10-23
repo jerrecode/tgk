@@ -88,13 +88,24 @@ DEFAULT_STYLES=MappingProxyType({
 
 def resolve_component_style(name,**overrides):
     if name not in DEFAULT_STYLES:raise ValueError("unknown component style "+str(name))
-    return DEFAULT_STYLES[name].override(**overrides) if overrides else DEFAULT_STYLES[name]
+    # User-owned option presets are installed separately and may be modified.
+    from .config import config_directory,_cached,_check_dict
+    from dataclasses import asdict
+    preset=DEFAULT_STYLES[name]
+    record=_cached(config_directory()/"options"/(name+".json"))
+    if record is not None:
+        _check_dict(record,("component","settings"),"component option")
+        if record.get("component")!=name:raise ValueError("component preset identity mismatch")
+        settings=record.get("settings",{})
+        _check_dict(settings,asdict(preset),"component style settings")
+        preset=preset.override(**settings)
+    return preset.override(**overrides) if overrides else preset
 
 def table_html(rows,theme=None,style=None,max_cells=5000,max_text_chars=300_000):
     """Escape data and render a bounded, local CSP-only HTML table."""
     from .theme import get_theme,normalize_color,blend_color
     theme=theme or get_theme()
-    style=style or DEFAULT_STYLES["table"]
+    style=style or resolve_component_style("table")
     if not isinstance(style,TableStyle):raise TypeError("style must be TableStyle")
     if not isinstance(rows,(list,tuple)):raise TypeError("table rows must be list or tuple")
     if len(rows)>max_cells:raise ValueError("too many table rows")
