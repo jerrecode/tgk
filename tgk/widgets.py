@@ -253,7 +253,8 @@ class _ClockHandle:
 Clock=_Clock()
 
 class TermuxBackend:
-    def __init__(self, tg=None, theme=None, text_style=None, window_mode='normal'):
+    def __init__(self, tg=None, theme=None, text_style=None,
+                 window_mode='normal',layout_scale=None):
         if tg is None:
             try: import termuxgui as tg
             except ImportError as exc:
@@ -269,7 +270,9 @@ class TermuxBackend:
         self._stop_requested=False
         from .adaptive import LayoutScale
         self.screen_metrics=None
-        self.layout_scale=LayoutScale()
+        self.layout_scale=layout_scale or LayoutScale()
+        if not isinstance(self.layout_scale,LayoutScale):
+            raise TypeError('layout_scale must be a LayoutScale')
         self.orientation_mode='system'
         if window_mode not in ('normal','dialog','overlay'):
             raise ValueError("window_mode must be normal, dialog or overlay")
@@ -761,6 +764,10 @@ class App(EventDispatcher):
         typography=kwargs.pop('text_style',None)
         self.window_mode=kwargs.pop('window_mode','normal')
         self.orientation_mode=kwargs.pop('orientation_mode','system')
+        from .adaptive import LayoutScale
+        self.layout_scale=kwargs.pop('layout_scale',None) or LayoutScale()
+        if not isinstance(self.layout_scale,LayoutScale):
+            raise TypeError('layout_scale must be a LayoutScale')
         if self.orientation_mode not in ('system','portrait','landscape'):
             raise ValueError('orientation_mode must be system, portrait or landscape')
         super().__init__(**kwargs);self.root=None;self._backend=None
@@ -793,7 +800,8 @@ class App(EventDispatcher):
                 self.root=Builder.load_file(type(self).__name__.removesuffix('App').lower()+'.kv')
             if not isinstance(self.root,Widget):raise TypeError('App.build must return a Widget')
             self._backend=TermuxBackend(theme=self.theme,text_style=self.text_style,
-                                        window_mode=self.window_mode)
+                                        window_mode=self.window_mode,
+                                        layout_scale=self.layout_scale)
             self._backend.orientation_mode=self.orientation_mode
             self._backend.run(self.root,self.on_start)
         finally:
