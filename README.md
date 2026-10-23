@@ -573,6 +573,50 @@ and cached by file modification metadata to avoid JSON parsing in the UI
 render hot path. Hardware maximum refresh rate, physical resolution and
 system inset dimensions remain unknown unless provided by Android APIs.
 
+## Atomic default changes and pinned profile overrides (0.6.2)
+
+Reinstalling TGK remains **create-only** for user settings: palettes,
+typography, option profiles and the core config are initialized if missing,
+but existing files are not overwritten.
+
+Use atomic updates to change the selected default or tune backend limits
+without hand-editing JSON:
+
+```sh
+python -m tgk.config init
+python -m tgk.config set ui theme ocean
+python -m tgk.config set ui text_style title_h2
+python -m tgk.config set ui option_profile battery_saver
+python -m tgk.config set io workers 2
+python -m tgk.config set layout touch_target_dp 64
+python -m tgk.config reset io workers
+python -m tgk.config show
+```
+
+```python
+from tgk.config import update_settings,update_config
+settings=update_settings({
+    "ui":{"theme":"ocean","text_style":"title_h2"},
+    "layout":{"touch_target_dp":64},
+    "runtime":{"clock_callbacks_per_tick":48}
+})
+update_config("io","workers",2)
+update_config("io","workers",None,reset=True)
+```
+
+**Precedence** (highest first): explicitly provided instance/CLI arguments;
+persisted pinned fields; selected option-profile values; factory defaults.
+A manually pinned value is respected **even when it happens to equal the
+factory default**. The `pinned` array in `config.json` stores exact field
+names such as `io.workers`. Existing 0.6.0/0.6.1 config files remain valid;
+their non-default values still act as overrides.
+
+Each update validates the complete prospective configuration, refuses
+symlink targets, writes a privately permissioned sibling temporary file,
+fsyncs and atomically replaces `config.json`; invalid updates leave the
+old bytes untouched. Batch `update_settings` is all-or-nothing. The preset
+files themselves are never rewritten by settings updates.
+
 ## Configured option profiles and resource-bound defaults (0.6.1)
 
 Set `ui.option_profile` in `~/.config/tgk/config.json` to one of
