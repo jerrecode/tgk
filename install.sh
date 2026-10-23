@@ -42,5 +42,9 @@ else
   "$PYTHON" -m pip install --no-build-isolation --no-deps --editable .
 fi
 if [ "$ENABLE_AUTO" -eq 1 ]; then "$PYTHON" -m tgk.install_hook; fi
+# Populate XDG/Termux user-owned presets without overwriting edited files.
+# Importing TGK never creates configuration automatically; installation does.
+"$PYTHON" -m tgk.config init --json
+"$PYTHON" -m tgk.config validate --json
 "$PYTHON" -c 'import tgk; from tgk.canvas import _lib; _lib(); print("Installed TGK:", tgk.__version__, "from", tgk.__file__)'
 printf '%s\n' 'Ready. Check the Termux:GUI service with: tgk doctor --connect (requires tgk-tools).'
