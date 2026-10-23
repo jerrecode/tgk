@@ -565,6 +565,24 @@ python -m tgk.config path       # active config file location
 python -m tgk.config validate   # strict bounds/types validation
 ```
 
+To select an option profile, set `ui.option_profile` in `config.json` to
+`balanced`, `battery_saver`, `performance`, `accessibility_touch`,
+`compact`, or `large_screen`. A profile applies to values still equal to
+their shipped defaults; values explicitly changed away from those defaults
+remain pinned. Edit individual settings **atomically** with:
+
+```python
+from tgk.config import update_config
+update_config("ui","option_profile","battery_saver")
+update_config("layout","touch_target_dp",64)
+update_config("ui","theme","ocean")
+```
+
+Invalid values are rejected before the old config is replaced, and symlink
+config targets are refused. Newly created direct `TermuxBackend` instances,
+stream processors with omitted limits, and icon pack exports without
+explicit sizes also inherit the persisted, validated settings.
+
 `tgk.config.configured_io_limits()` returns validated limits for
 resource-bounded pipelines. Alternative presets are available through
 `tgk.config.option_config("battery_saver")`; they do not overwrite the
