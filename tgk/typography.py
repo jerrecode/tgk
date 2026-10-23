@@ -111,7 +111,10 @@ def resolve_text_style(style="body",**overrides):
 
 _active=ContextVar("tgk_typography",default=None)
 def get_text_style():
-    return _active.get() or resolve_text_style("body")
+    selected=_active.get()
+    if selected is not None:return selected
+    from .config import configured_text_style
+    return configured_text_style()
 def set_text_style(style="body",**overrides):
     value=resolve_text_style(style,**overrides);_active.set(value);return value
 
