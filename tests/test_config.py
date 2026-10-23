@@ -76,7 +76,7 @@ class ConfigurationTests(unittest.TestCase):
         chosen=get_theme()
         self.assertEqual(chosen["accent"],"#AA33BBFF")
         self.assertEqual(chosen["button_pressed"],"#EECC00FF")
-        self.assertEqual(chosen["button_active"],chosen.override(button="#CCEE11")["button_active"] if False else chosen["button_active"])
+        self.assertEqual(chosen["button_active"],get_theme()["button_active"])
 
     def test_config_invalid_updates_do_not_corrupt_file(self):
         config.initialize_config()
@@ -115,6 +115,23 @@ class ConfigurationTests(unittest.TestCase):
         data["defaults"]["theme"]="forest"
         path.write_text(json.dumps(data),encoding="utf-8")
         self.assertEqual(get_theme().name,"forest")
+
+    def test_component_options_and_io_budgets_apply_without_explicit_override(self):
+        from tgk.style_tokens import resolve_component_style
+        from tgk.io_pipeline import configured_limits,BoundedPool
+        config.initialize_config()
+        path=self.root/"options/button.json"
+        doc=json.loads(path.read_text(encoding="utf-8"))
+        doc["settings"]["corner_radius_dp"]=16
+        path.write_text(json.dumps(doc),encoding="utf-8")
+        self.assertEqual(resolve_component_style("button").corner_radius_dp,16)
+        self.assertEqual(resolve_component_style("button",corner_radius_dp=3).corner_radius_dp,3)
+        config.update_config("io","workers",3)
+        config.update_config("io","pending",1)
+        self.assertEqual(configured_limits().workers,3)
+        with BoundedPool() as pool:
+            self.assertEqual(pool.limits.workers,3)
+            self.assertEqual(pool.limits.pending,1)
 
     def test_invalid_file_fails_loudly(self):
         config.initialize_config()
