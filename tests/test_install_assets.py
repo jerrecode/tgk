@@ -123,7 +123,7 @@ class InstallAssetTests(unittest.TestCase):
                   '"$PYTHON" -m tgk.install_assets']
         positions=[script.index(x) for x in sequence]
         self.assertEqual(positions,sorted(positions))
-        self.assertIn("icon catalog atomically",script)
+        self.assertIn("safely upgrades intact TGK-made",script)
 
     def test_dry_run_has_no_side_effects(self):
         from contextlib import redirect_stdout
