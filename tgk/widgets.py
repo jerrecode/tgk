@@ -522,12 +522,18 @@ class TermuxBackend:
             if callable(gravity):gravity(horizontal[ha],vertical[va])
         if isinstance(node,ProgressBar):native.setprogress(max(0,min(100,round(100*node.value/node.max if node.max else 0))))
         # Native dimensions are dp (Termux:GUI handles physical pixel density).
+        from .style_tokens import ComponentStyle,resolve_component_style
+        component=getattr(node,'component_style',None)
+        if isinstance(component,str):component=resolve_component_style(component)
+        if component is not None and not isinstance(component,ComponentStyle):
+            raise TypeError('component_style must be a named preset or ComponentStyle')
         interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
         requested=getattr(node,'height',None)
         if interactive and not getattr(node,'allow_small_touch_target',False):
+            minimum=component.min_touch_dp if component is not None else self.layout_scale.touch_target_dp
             if requested is None:
-                requested=72 if isinstance(node,Slider) else self.layout_scale.touch_target_dp
-            else:requested=max(float(requested),self.layout_scale.touch_target_dp)
+                requested=max(72,minimum) if isinstance(node,Slider) else minimum
+            else:requested=max(float(requested),minimum)
         if requested is not None:native.setheight(int(math.ceil(requested)))
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
         if isinstance(node.parent,BoxLayout):
@@ -560,6 +566,8 @@ class TermuxBackend:
                                        rows,cols,ar,ac)
         if isinstance(node,BoxLayout) and node.padding:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
+        if component is not None and component.margin_dp:
+            native.setmargin(int(component.margin_dp))
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
         self._paint_node(node)
