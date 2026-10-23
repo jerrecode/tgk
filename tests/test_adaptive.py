@@ -143,6 +143,10 @@ class SemanticTokenTests(unittest.TestCase):
         self.assertIn(colors['table_first_column'],markup)
         with self.assertRaises(ValueError):table_html([[1,2],[3]])
         with self.assertRaises(ValueError):table_html([[1]*20100])
+        with self.assertRaisesRegex(ValueError,'text size'):
+            table_html([['x'*300001]])
+        with self.assertRaisesRegex(ValueError,'cell count'):
+            table_html([[str(x) for x in range(5001)]])
 
     def test_rich_table_updates_live_and_rejects_invalid_rows(self):
         table=RichTable(rows=[['a','b'],[1,2]])
