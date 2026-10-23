@@ -176,10 +176,14 @@ def _load_cached(path,mtime_ns,size):
 
 def load_config(path=None):
     path=Path(path) if path is not None else config_path()
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError("TGK config symlink path is not allowed: "+str(path))
     try:info=path.stat()
     except FileNotFoundError:return deepcopy(DEFAULT_CONFIG)
     if not path.is_file():raise ValueError("TGK config path is not a file")
-    specified=deepcopy(_load_cached(str(path.resolve()),info.st_mtime_ns,info.st_size))
+    # Never resolve() a path before a no-follow read: that would turn a
+    # symlink into its legitimate target and defeat the safety check.
+    specified=deepcopy(_load_cached(str(path.absolute()),info.st_mtime_ns,info.st_size))
     name=specified["ui"]["option_profile"]
     # User-selectable option profiles are applied before explicit overrides.
     # Old installers wrote ALL built-in keys, so treat unchanged built-in
