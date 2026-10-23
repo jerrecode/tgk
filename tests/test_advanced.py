@@ -130,7 +130,16 @@ class TypographyTests(unittest.TestCase):
 class WindowTests(unittest.TestCase):
     def test_overlay_event_loop_exits_without_destroy_event(self):
         FakeTG.views=[];FakeTG.events=[];FakeTG.count=0
-        backend=TermuxBackend(tg=FakeTG,window_mode="overlay")
+        # The published Termux:GUI Activity accepts overlay=True; the
+        # historical base mock only knows intercept=True.
+        class OverlayTG:
+            Connection=FakeTG.Connection
+            TextView=FakeTG._View
+            class Activity(FakeTG.Activity):
+                def __init__(self,connection,intercept=False,overlay=False):
+                    super().__init__(connection,intercept=intercept)
+                    self.overlay=overlay
+        backend=TermuxBackend(tg=OverlayTG,window_mode="overlay")
         root=Label(text="Overlay")
         backend.run(root,on_start=backend.stop)
         self.assertIsNone(backend.activity)
