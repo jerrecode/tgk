@@ -98,11 +98,13 @@ class Popup(BoxLayout):
 
 class RichTextLabel(Widget):
     """Rich text in a local JS-disabled WebView, not a native TextView."""
-    def __init__(self,text="",spans=None,style="body",**kwargs):
+    def __init__(self,text="",spans=None,style=None,**kwargs):
+        object.__setattr__(self,"_inherited_text_style",None)
         super().__init__(text=text,spans=spans,style=style,**kwargs)
     def html(self):
         content=self.spans if self.spans is not None else self.text
-        return rich_html(content,style=self.style,theme=self._effective_theme)
+        style=self.style if self.style is not None else (self._inherited_text_style or "body")
+        return rich_html(content,style=style,theme=self._effective_theme)
     def _update_native(self,name,value):
         super()._update_native(name,value)
         if name in ("text","spans","style") and self._native is not None:
@@ -134,9 +136,10 @@ class InfiniteCanvas(Widget):
             raise ValueError("zoom must be in [0.03125,128]")
         if not math.isfinite(center_x) or not math.isfinite(center_y):
             raise ValueError("canvas center must be finite")
-        if not math.isfinite(grid_step) or grid_step<=0:
-            raise ValueError("grid_step must be positive")
+        if not math.isfinite(grid_step) or not 1e-6<=grid_step<=1e6:
+            raise ValueError("grid_step must be finite within [1e-6,1e6]")
         object.__setattr__(self,"_draw_viewport",None)
+        object.__setattr__(self,"_defer_draw",False)
         object.__setattr__(self,"_touch_points",{})
         object.__setattr__(self,"_last_pinch_distance",None)
         object.__setattr__(self,"markers",[])
@@ -147,7 +150,7 @@ class InfiniteCanvas(Widget):
     def _update_native(self,name,value):
         super()._update_native(name,value)
         if name in ("zoom","center_x","center_y","grid_step"):
-            if self._draw_viewport:self._draw_viewport()
+            if self._draw_viewport and not self._defer_draw:self._draw_viewport()
 
     def world_to_screen(self,x,y):
         return (self.width/2+(float(x)-self.center_x)*self.zoom,
@@ -160,8 +163,12 @@ class InfiniteCanvas(Widget):
     def pan(self,dx,dy):
         if not all(math.isfinite(float(v)) for v in (dx,dy)):
             raise ValueError("pan must be finite")
-        self.center_x-=dx/self.zoom
-        self.center_y-=dy/self.zoom
+        self._defer_draw=True
+        try:
+            self.center_x-=dx/self.zoom
+            self.center_y-=dy/self.zoom
+        finally:self._defer_draw=False
+        if self._draw_viewport:self._draw_viewport()
         self.dispatch("on_transform",self.center_x,self.center_y,self.zoom)
 
     def zoom_at(self,factor,x=None,y=None):
@@ -170,16 +177,21 @@ class InfiniteCanvas(Widget):
         if x is None:x=self.width/2
         if y is None:y=self.height/2
         anchor=self.screen_to_world(x,y)
-        self.zoom=min(128,max(.03125,self.zoom*factor))
-        self.center_x=anchor[0]-(float(x)-self.width/2)/self.zoom
-        self.center_y=anchor[1]-(float(y)-self.height/2)/self.zoom
+        self._defer_draw=True
+        try:
+            self.zoom=min(128,max(.03125,self.zoom*factor))
+            self.center_x=anchor[0]-(float(x)-self.width/2)/self.zoom
+            self.center_y=anchor[1]-(float(y)-self.height/2)/self.zoom
+        finally:self._defer_draw=False
+        if self._draw_viewport:self._draw_viewport()
         self.dispatch("on_transform",self.center_x,self.center_y,self.zoom)
 
     def add_marker(self,x,y,role="accent",radius=8):
         if not math.isfinite(float(x)) or not math.isfinite(float(y)):
             raise ValueError("marker must have finite position")
-        if not isinstance(role,str) or not 1<=radius<=256:
-            raise ValueError("invalid marker")
+        from .theme import ROLES
+        if role not in ROLES or type(radius) is not int or not 1<=radius<=256:
+            raise ValueError("invalid marker role/radius")
         if len(self.markers)>=10_000:raise ValueError("marker limit exceeded")
         self.markers.append((float(x),float(y),role,int(radius)))
         if self._draw_viewport:self._draw_viewport()
@@ -199,6 +211,7 @@ class InfiniteCanvas(Widget):
             try:
                 x=float(p["x"]);y=float(p["y"]);pointer=p.get("id",index)
             except (ValueError,TypeError,OverflowError,KeyError):continue
+            if type(pointer) not in (int,str):continue
             if math.isfinite(x) and math.isfinite(y):
                 points[pointer]=(x,y)
         if action in ("up","pointer_up"):
