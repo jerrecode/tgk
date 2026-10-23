@@ -19,6 +19,7 @@ SCHEMA_VERSION=1
 MAX_JSON_BYTES=512*1024
 DEFAULT_CONFIG={
     "schema_version":SCHEMA_VERSION,
+    "pinned":[],
     "ui":{"theme":"midnight","text_style":"body","orientation":"system",
           "window_mode":"normal","option_profile":"balanced"},
     "layout":{
@@ -94,6 +95,14 @@ def validate_config(value):
     _merge(config,value)
     if type(config["schema_version"]) is not int or config["schema_version"]!=SCHEMA_VERSION:
         raise ValueError("unsupported TGK config schema_version")
+    pinned=config["pinned"]
+    allowed={section+"."+name for section,fields in DEFAULT_CONFIG.items()
+             if isinstance(fields,dict) for name in fields}
+    if type(pinned) is not list or len(pinned)>128 or any(
+            type(name) is not str or name not in allowed for name in pinned):
+        raise ValueError("pinned must list known section.field keys")
+    if len(pinned)!=len(set(pinned)):
+        raise ValueError("duplicate pinned fields")
     ui=config["ui"]
     for key in ("theme","text_style","option_profile"):_safe_name(ui[key])
     if ui["orientation"] not in ("system","portrait","landscape"):
@@ -146,12 +155,14 @@ def load_config(path=None):
     # Old installers wrote ALL built-in keys, so treat unchanged built-in
     # values as inherited to keep 0.6 configuration files compatible.
     profile=option_config(name)
+    pinned=set(specified["pinned"])
     for section in ("layout","runtime","io","tools"):
         for key,value in specified[section].items():
-            if value!=DEFAULT_CONFIG[section][key]:
+            if value!=DEFAULT_CONFIG[section][key] or section+"."+key in pinned:
                 profile[section][key]=value
     profile["ui"].update(specified["ui"])
     profile["icons"].update(specified["icons"])
+    profile["pinned"]=specified["pinned"]
     return validate_config(profile)
 
 
@@ -160,47 +171,72 @@ def clear_config_cache():
     _load_cached.cache_clear()
 
 
-def update_config(section,key,value):
-    """Atomically replace one validated config field; keep all other fields.
+def update_settings(changes, *, reset=()):
+    """Atomically validate and commit multiple user changes in one transaction.
 
-    The existing file is never replaced if validation or serialization fails.
-    No user preset file is overwritten. For concurrent writers use one process
-    or an external lock; this method prevents torn writes, not lost updates.
+    Explicit settings remain pinned even when equal to factory defaults.
+    Reset removes that pin, returning the field to profile inheritance.
+    Writes are atomic but simultaneous processes need external locking to
+    prevent lost updates.
     """
-    _safe_name(section)
-    _safe_name(key)
-    if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
-        raise ValueError("unknown TGK config section: "+section)
-    if key not in DEFAULT_CONFIG[section]:
-        raise ValueError("unknown TGK config field: "+section+"."+key)
+    if not isinstance(changes,dict):raise ValueError("changes must be an object")
+    pins_to_add=set()
+    for section,fields in changes.items():
+        if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
+            raise ValueError("unknown TGK config section: "+str(section))
+        if not isinstance(fields,dict):raise ValueError("section fields must be objects")
+        for key in fields:
+            if key not in DEFAULT_CONFIG[section]:
+                raise ValueError("unknown TGK config field: "+str(section)+"."+str(key))
+            pins_to_add.add(section+"."+key)
+    try:
+        reset_fields=list(reset)
+    except TypeError as exc:
+        raise ValueError("reset must be iterable") from exc
+    reset_names=set()
+    for pair in reset_fields:
+        if not isinstance(pair,(tuple,list)) or len(pair)!=2:
+            raise ValueError("reset items must be SECTION,KEY pairs")
+        section,key=pair
+        if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict) or key not in DEFAULT_CONFIG[section]:
+            raise ValueError("invalid reset field")
+        name=section+"."+key
+        if name in pins_to_add or name in reset_names:
+            raise ValueError("duplicate or conflicting set/reset field")
+        reset_names.add(name)
     directory=config_home()
     path=config_path()
     if directory.is_symlink() or path.is_symlink():
         raise ValueError("refuse symlink TGK configuration target")
     if not path.is_file():
         raise FileNotFoundError("run python -m tgk.config init before editing")
-    # Preserve unknown data rejection and the current persisted fields.
+    # Unknown fields and invalid current content are rejected, not repaired
+    # silently, so a failed transaction preserves the exact prior bytes.
     stored=_read_json(path)
-    merged=deepcopy(DEFAULT_CONFIG)
-    _merge(merged,stored)
-    merged[section][key]=value
+    merged=validate_config(stored)
+    for section,fields in changes.items():merged[section].update(fields)
+    for section,key in reset_fields:merged[section][key]=deepcopy(DEFAULT_CONFIG[section][key])
+    pinned=set(merged["pinned"])
+    pinned.update(pins_to_add)
+    pinned.difference_update(reset_names)
+    merged["pinned"]=sorted(pinned)
     validate_config(merged)
-    # Validate selected preset before writing; a syntactically valid name
-    # without an installed profile must not poison the active config file.
     option_config(merged["ui"]["option_profile"])
     from .theme import PRESETS as THEMES,load_theme
     theme_name=merged["ui"]["theme"]
     theme_file=config_home()/"palettes"/(theme_name+".json")
     if theme_file.is_file():load_theme(theme_file)
     elif theme_name not in THEMES:raise ValueError("unknown theme preset "+theme_name)
-    from .typography import PRESETS as TEXT_PRESETS
+    from .typography import PRESETS as TEXT_PRESETS,resolve_text_style
     text_name=merged["ui"]["text_style"]
     text_file=config_home()/"text_styles"/(text_name+".json")
     if text_file.is_file():
         style_obj=_read_json(text_file)
         if set(style_obj)-{"style","properties"} or not isinstance(style_obj.get("properties"),dict):
             raise ValueError("invalid TGK text style preset")
-    elif text_name not in TEXT_PRESETS:raise ValueError("unknown text style "+text_name)
+        resolve_text_style(style_obj.get("style",text_name),**style_obj["properties"])
+    elif text_name not in TEXT_PRESETS:
+        raise ValueError("unknown text style "+text_name)
     payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
     if len(payload)>MAX_JSON_BYTES:raise ValueError("config would exceed size limit")
     import tempfile
@@ -211,10 +247,8 @@ def update_config(section,key,value):
             out.flush()
             os.fsync(out.fileno())
         os.chmod(temporary,0o600)
-        if path.is_symlink():
-            raise ValueError("refuse symlink TGK configuration target")
+        if path.is_symlink():raise ValueError("refuse symlink TGK configuration target")
         os.replace(temporary,path)
-        # Best-effort directory sync for durability after a crash.
         try:
             directory_fd=os.open(directory,os.O_RDONLY)
             try:os.fsync(directory_fd)
@@ -224,6 +258,12 @@ def update_config(section,key,value):
         Path(temporary).unlink(missing_ok=True)
     clear_config_cache()
     return load_config()
+
+
+def update_config(section,key,value=None,*,reset=False):
+    """Set or reset a field with one validated atomic transaction."""
+    if reset:return update_settings({},reset=((section,key),))
+    return update_settings({section:{key:value}})
 
 
 def option_config(name):
@@ -321,7 +361,7 @@ def main(argv=None):
     import argparse
     parser=argparse.ArgumentParser(description="Initialize/read persistent TGK configuration")
     parser.add_argument("action",choices=("init","show","path","validate",
-                                          "get","set","profiles"),nargs="?",default="show")
+                                          "get","set","reset","profiles"),nargs="?",default="show")
     parser.add_argument("section",nargs="?")
     parser.add_argument("key",nargs="?")
     parser.add_argument("value",nargs="?")
@@ -337,7 +377,7 @@ def main(argv=None):
         result={"available":sorted(set(OPTIONS)|{
             p.stem for p in (config_home()/"options").glob("*.json")
             if p.is_file() and _SAFE_NAME.fullmatch(p.stem)})}
-    elif args.action in ("get","set"):
+    elif args.action in ("get","set","reset"):
         if args.section is None or args.key is None:
             parser.error(args.action+" requires SECTION KEY")
         if args.section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[args.section],dict):
@@ -348,6 +388,10 @@ def main(argv=None):
             if args.value is not None:parser.error("get accepts SECTION KEY only")
             result={"section":args.section,"key":args.key,
                     "value":load_config()[args.section][args.key]}
+        elif args.action=="reset":
+            if args.value is not None:parser.error("reset accepts SECTION KEY only")
+            try:result=update_config(args.section,args.key,reset=True)
+            except (ValueError,FileNotFoundError) as exc:parser.error(str(exc))
         else:
             if args.value is None:parser.error("set requires SECTION KEY JSON_VALUE")
             try:value=json.loads(args.value)
