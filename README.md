@@ -30,6 +30,40 @@ python -m tgk.install_hook --remove
 make test
 ```
 
+### Update an existing installation
+
+From the retained TGK repository checkout, update to the verified `main`
+branch and reinstall with the **same Python interpreter** used for installation:
+
+```sh
+cd ~/tgk
+git switch main
+git pull --ff-only
+sh ./install.sh --copy
+python -m tgk.config validate
+python -c 'import tgk; print("TGK",tgk.__version__,tgk.__file__)'
+```
+
+For a development-only editable installation, use `sh ./install.sh --editable`
+instead and keep the checkout. The installer recompiles the C renderer for
+this device and creates **only missing** files in
+`${TGK_CONFIG_HOME:-${XDG_CONFIG_HOME:-~/.config}/tgk}`, preserving edited
+`config.json`, `palettes/`, `text_styles/` and `options/`. Back up these
+files before manually editing them. If `git pull --ff-only` reports local
+changes or a divergent branch, inspect `git status` and reconcile them
+instead of forcing a reset.
+
+With TGK Tools installed, check the Android service and the responsive UI:
+
+```sh
+tgk doctor --connect
+tgk layout-plan --connect --json
+tgk adaptive-demo --orientation system
+```
+
+Physical Android touch, insets and orientation behavior requires testing on
+the device; ordinary Linux CI does not establish that behavior.
+
 ### How the Kivy bridge behaves
 
 It registers a standard Python `sys.meta_path` finder via an interpreter-local `.pth` file, which means transitive imports such as `app -> helper -> from kivy.uix.button import Button` resolve automatically. The hook only activates on Termux (or with `TGK_ENABLE=1`), does **not** rewrite application source, and opens an Android Activity only when `App.run()` executes. `TGK_DISABLE=1` disables it for a Python process. Because the shim overrides actual Kivy for supported modules, do not enable it in environments where you rely on real Kivy without intending to use TGK.
