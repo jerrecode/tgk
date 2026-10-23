@@ -93,6 +93,8 @@ tgk doctor --connect
 
 A successful Linux CI run does not verify the Android plugin connection, which needs hardware/device testing. Avoid downloading a Linux-built `.so` for Termux: `install.sh` compiles for the current device.
 
+Non-editable Python package builds also compile the renderer from C source on the build device. Wheels are tagged for that platform/interpreter; they are never advertised as platform-independent `py3-none-any` packages. Source distributions exclude existing `.so` files so a stale host binary cannot be shipped as source. Editable installations still use the in-place renderer built by `install.sh` or `make build`.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
@@ -100,6 +102,8 @@ GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `ima
 ## Tests / automation
 
 `make test` runs Android-free behavioral tests plus native pixel clipping checks. CI runs on each push and PR. Static PR review checks flag risky shell installation or credential patterns and annotate GitHub Actions output; **no unreviewed merges** are performed. Hardware-driven gesture/event tests, Android frame latency, and package/version compatibility remain outstanding.
+
+Packaging regression tests require pip, setuptools and wheel in the test interpreter (`python -m pip install setuptools wheel`). They build real wheels and source distributions offline, check their contents/tags, and load the newly built renderer outside the source checkout.
 
 ## Repository organization
 
