@@ -71,7 +71,7 @@ TGK-generated icon catalog is automatically refreshed when its manifest verifies
 that every generated asset remains unchanged and no user-owned files have been
 added. Modified, foreign or unverified icon catalogs are preserved unchanged;
 if you deliberately want to replace one, back it up and use
-`python -m tgk.icon_builder --output \"$TGK_CONFIG_HOME\" --overwrite`
+`python -m tgk.icon_builder --output ~/.config/tgk --overwrite`
 with the appropriate configuration path (by default `~/.config/tgk`).
 
 **Icon design:** file and directory icons retain composable silhouettes and
