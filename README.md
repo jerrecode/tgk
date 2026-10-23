@@ -563,7 +563,33 @@ python -m tgk.config init       # create missing files; preserve edits
 python -m tgk.config show       # resolved, validated settings
 python -m tgk.config path       # active config file location
 python -m tgk.config validate   # strict bounds/types validation
+
 ```
+
+Persistent defaults are created by `sh ./install.sh` without overwriting
+existing user files. The default palette (`ui.theme`), typography
+(`ui.text_style`), screen orientation, 12-column layout/touch target,
+Clock work budget, I/O caps, option profile, and icon raster options can be
+changed atomically from Python:
+
+```python
+from tgk.config import patch_config, update_config, clear_config_cache
+patch_config({"ui": {"theme": "ocean", "option_profile": "battery_saver"},
+              "layout": {"touch_target_dp": 56}})
+update_config("runtime", "clock_callbacks_per_tick", 48)
+# After an external editor modifies preset files:
+clear_config_cache()
+```
+
+Changes are validated before being committed and written using a temporary
+sibling file plus atomic rename; preset files are left untouched.
+Explicit per-App settings and shell flags still override saved defaults.
+A direct `TermuxBackend()` now honors configured layout and scheduler
+budgets. SVG generation respects saved icon sizes, caps, and the configured
+raster default, unless caller arguments override them.
+
+```
+
 
 `tgk.config.configured_io_limits()` returns validated limits for
 resource-bounded pipelines. Alternative presets are available through
