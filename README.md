@@ -132,7 +132,7 @@ current protocol's per-widget color controls and may retain OS styling.
 ```sh
 # Discover all scenarios; only --list runs without Android:
 python -m tgk.demos --list
-# 13 graduated cases: basic rows → grids → nesting → scroll → forms →
+# 16 graduated cases: basic rows → grids → nesting → scroll → forms →
 # linked sliders → state transitions → gravity/weights → overrides → stress →
 # interactive palette editor → full workbench.
 python -m tgk.demos --demo 04_nesting --theme forest
@@ -155,7 +155,7 @@ responsive constraint layout and dynamically inserting/removing native Views
 are **not** yet supported. View-gravity tests are not a substitute for true
 anchor positioning tests. Inspect Android layout behavior on-device.
 
-The tests construct all 13 scenarios without Android and check callbacks,
+The tests construct all 16 scenarios without Android and check callbacks,
 inherited palette semantics, invalid colors and live updates. Android device
 rendering and interaction remain unverified by Linux CI.
 
