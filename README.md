@@ -660,6 +660,43 @@ provided. Icon asset generation inherits `icons.low/mid/high/max_icons`
 unless callers supply explicit arguments. These changes preserve the existing
 default behavior when no user configuration is present.
 
+## Viewport-aware adaptive sizing (0.6.5)
+
+The `SizeSpec` API offers explicit dp dimensions, viewport-relative width
+and height fractions, independent min/max constraints, viewport-fraction
+caps, padding-safe margins, and optional width/height aspect-ratio control.
+It operates on Android **content-window dp**, not physical panel pixels or
+guessed system-bar offsets. Only widgets with a `size_spec` opt in.
+
+```python
+from tgk import Button, SizeSpec, ResponsiveGrid
+action = Button(
+    text="Details", span_compact=12, span_medium=6, span_expanded=4,
+    size_spec=SizeSpec(width_fraction=.55, height_dp=56,
+                       max_width_dp=280, max_height_fraction=.2),
+)
+grid = ResponsiveGrid(cols=8, span_units=12)
+grid.add_widget(action)
+```
+
+On `config` orientation/size changes, TGK recomputes only opted-in sizes
+and changed responsive grid placements, keeping existing native views.
+Interactive elements respect the configured touch minimum except where
+the actual content viewport is smaller. `SizeSpec(fit="contain",
+aspect_ratio=...)` preserves proportions within both dimensions.
+
+A previously ignored `layout.columns` setting now controls newly created
+`ResponsiveGrid` physical columns (default 12). Existing 12-unit span
+presets map proportionally to different physical columns, or use
+`span_units=8` to define a native eight-unit design system directly.
+Programmatic layout planning uses `arrange_spans(...,columns=8,
+logical_columns=12)` for matching preview calculations.
+
+Unknown physical screen resolution, color depth and refresh rate remain
+unavailable through Termux:GUI's current public window-configuration API.
+This is a compatibility-focused sizing extension; actual phone rotation,
+accessibility, and control metrics still require hardware validation.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
