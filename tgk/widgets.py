@@ -79,6 +79,7 @@ class Widget(EventDispatcher):
         object.__setattr__(self,'_native',None)
         object.__setattr__(self,'_theme_hook',None)
         object.__setattr__(self,'_effective_theme',None)
+        object.__setattr__(self,'_applied_native_style',{})
         super().__init__(**kwargs)
         if type(self).__name__ not in (
             'Widget','BoxLayout','GridLayout','FloatLayout','ScrollView','Label',
@@ -120,7 +121,7 @@ class Widget(EventDispatcher):
         if name in ('theme','colors','background_color','text_color',
                     'text_style','text_size','font_weight','font_family','italic',
                     'underline','strike','text_align','line_height','font_color_role'):
-            if self._theme_hook is not None:self._theme_hook()
+            if self._theme_hook is not None:self._theme_hook(name)
         if name=='visible' and n is not None and hasattr(n,'setvisibility'):
             n.setvisibility(2 if value else 0)
         if name=='current' and getattr(self,'_sync_views',None):
@@ -269,6 +270,24 @@ class TermuxBackend:
             if colors:result=result.override(**colors)
         return result
 
+    def _cached_set(self,node,key,method,value):
+        """Send only real native style changes; avoid redundant JSON/IPC."""
+        cache=node._applied_native_style
+        if cache.get(key)==value:return False
+        setter=getattr(node._native,method,None)
+        if not callable(setter):return False
+        setter(value)
+        cache[key]=value
+        return True
+
+    def invalidate_style(self,node,property_name):
+        """Local style change: one view. Inherited palette change: subtree."""
+        if property_name in ('colors','theme'):
+            for child in node.walk():
+                if child._native is not None:self._paint_node(child)
+        elif node._native is not None:
+            self._paint_node(node)
+
     def _paint_node(self,node):
         from .theme import tgui_color
         selected=self._node_theme(node)
@@ -281,24 +300,27 @@ class TermuxBackend:
             elif isinstance(node,(BoxLayout,GridLayout,FloatLayout,ScrollView)):background=selected['surface']
             elif isinstance(node,(Button,TextInput)):background=selected['button' if isinstance(node,Button) else 'surface_alt']
         if background is not None:
-            setter=getattr(native,'setbackgroundcolor',None)
-            if callable(setter):setter(tgui_color(background))
-        foreground=getattr(node,'text_color',None)
-        if foreground is None and isinstance(node,(Label,TextInput,CheckBox,Switch,ToggleButton,Spinner)):
-            foreground=selected['button_text' if isinstance(node,Button) else 'text']
-        if foreground is not None:
-            setter=getattr(native,'settextcolor',None)
-            if callable(setter):setter(tgui_color(foreground))
+            self._cached_set(node,'background','setbackgroundcolor',tgui_color(background))
         from .advanced import InfiniteCanvas,RichTextLabel
         if isinstance(node,(Label,TextInput)):
             self._paint_text(node,selected)
+        elif isinstance(node,(CheckBox,Switch,ToggleButton,Spinner)):
+            foreground=getattr(node,'text_color',selected['text'])
+            self._cached_set(node,'foreground','settextcolor',tgui_color(foreground))
         if isinstance(node,RichTextLabel):
             node._inherited_text_style=self.text_style
-            native.setdata(node.html())
+            self._cached_set(node,'markup','setdata',node.html())
         if isinstance(node,Slider) and node._slider_draw is not None:
-            node._slider_draw()
+            signature=tuple(selected[role] for role in
+                            ('background','track','accent','thumb','primary'))
+            if node._applied_native_style.get('slider_palette')!=signature:
+                node._slider_draw()
+                node._applied_native_style['slider_palette']=signature
         if isinstance(node,InfiniteCanvas) and node._draw_viewport is not None:
-            node._draw_viewport()
+            signature=tuple(selected[role] for role in ('background','outline','accent'))
+            if node._applied_native_style.get('canvas_palette')!=signature:
+                node._draw_viewport()
+                node._applied_native_style['canvas_palette']=signature
 
     def _paint_text(self,node,selected):
         from .typography import resolve_text_style
@@ -320,10 +342,9 @@ class TermuxBackend:
                 # Label.font_size predates presets; text_size/text_style is explicit.
                 legacy=getattr(node,'font_size',None)
                 size=legacy if legacy not in (None,16) and 'size' not in options and not hasattr(node,'text_style') else style.size
-                setsize(int(size))
-            if not hasattr(node,'text_color'):
-                setter=getattr(native,'settextcolor',None)
-                if callable(setter):setter(tgui_color(selected[style.role]))
+                self._cached_set(node,'font_size','settextsize',int(size))
+            color=getattr(node,'text_color',selected[style.role])
+            self._cached_set(node,'foreground','settextcolor',tgui_color(color))
         return style
 
     def apply_text_style(self,style=None):
@@ -420,12 +441,11 @@ class TermuxBackend:
         elif isinstance(node,ProgressBar):native=tg.ProgressBar(a,parent)
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
-        node._theme_hook=lambda: self.apply_theme()
+        node._theme_hook=lambda changed,node=node: self.invalidate_style(node,changed)
         if isinstance(node,ScreenManager):
             node._sync_views=node._sync
         if isinstance(node,Slider):node._effective_theme=self._node_theme(node)
-        if isinstance(node,Slider):node._slider_draw()
-        if isinstance(node,Label):native.settextsize(int(node.font_size))
+        # _paint_node performs the initial style and slider draw exactly once.
         if isinstance(node,(Label,TextInput)):
             horizontal={'left':0,'start':0,'center':1,'right':2,'end':2}
             vertical={'top':0,'center':1,'bottom':2}
@@ -641,6 +661,7 @@ class TermuxBackend:
                     node._native=None
                     node._theme_hook=None
                     node._effective_theme=None
+                    node._applied_native_style.clear()
                     if hasattr(node,'_sync_views'):node._sync_views=None
                     if hasattr(node,'_tab_bar'):node._tab_bar=None
                     if hasattr(node,'_inherited_text_style'):node._inherited_text_style=None
