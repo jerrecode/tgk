@@ -29,6 +29,11 @@ class Limits:
     workers: int = 2
     pending: int = 4
 
+    @classmethod
+    def from_config(cls):
+        from .config import settings
+        return cls(**settings()["io"])
+
     def __post_init__(self):
         for name,lower,upper in (("chunk_bytes",1024,8*1024*1024),
                                  ("max_bytes",1,1024*1024*1024*1024),
@@ -54,7 +59,7 @@ def transfer(source, sink, *, limits=None, cancelled=None, progress=None):
     Never reads more than chunk_bytes (+ one overflow-detection byte), and
     writes a chunk completely before requesting the next chunk.
     """
-    limits=limits or Limits()
+    limits=limits if limits is not None else Limits.from_config()
     start=time.monotonic()
     deadline=start+limits.timeout
     digest=hashlib.sha256()
@@ -131,7 +136,7 @@ def download(url,target,*,limits=None,allow_http=False,allow_hosts=None,
     or route requests through their own SSRF-safe network layer.
     """
     from urllib.request import build_opener,HTTPRedirectHandler,Request
-    limits=limits or Limits()
+    limits=limits if limits is not None else Limits.from_config()
     parsed=urlsplit(url)
     schemes=("https","http") if allow_http else ("https",)
     if parsed.scheme.lower() not in schemes or not parsed.hostname or parsed.username or parsed.password:
@@ -225,7 +230,7 @@ class BoundedPool:
     """Small thread pool with a bounded submission queue and explicit shutdown."""
 
     def __init__(self, limits=None):
-        self.limits=limits or Limits()
+        self.limits=limits if limits is not None else Limits.from_config()
         self._slots=BoundedSemaphore(self.limits.workers+self.limits.pending)
         self._pool=ThreadPoolExecutor(max_workers=self.limits.workers,
                                       thread_name_prefix="tgk-io")
