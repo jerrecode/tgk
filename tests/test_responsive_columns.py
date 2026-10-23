@@ -76,6 +76,39 @@ class ResponsiveColumnTests(unittest.TestCase):
         self.assertEqual(button._native.setwidth_value,(20,))
         self.assertEqual(button._native.setheight_value,(20,))
 
+    def test_kv_assigned_columns_override_app_defaults(self):
+        from tgk.kv import Builder
+        grid=Builder.load_string("""ResponsiveGrid:
+    cols: 8
+    Button:
+        text: 'First'
+        span_compact: 12
+    Button:
+        text: 'Second'
+        span_compact: 12
+""")
+        self.assertEqual(grid.cols,8)
+        self.assertTrue(grid._explicit_columns)
+        backend=TermuxBackend(tg=FakeTG,layout_scale=LayoutScale(columns=6))
+        backend.activity=FakeTG.Activity(None)
+        backend.screen_metrics=self.phone
+        backend.render(grid)
+        self.assertEqual(grid._native.args[2],8)
+        with self.assertRaises(RuntimeError):grid.cols=4
+        self.assertEqual(grid.cols,8)
+
+    def test_assigning_columns_before_render_is_explicit(self):
+        grid=ResponsiveGrid()
+        grid.cols=5
+        grid.add_widget(Button(span=12))
+        backend=TermuxBackend(tg=FakeTG,layout_scale=LayoutScale(columns=6))
+        backend.activity=FakeTG.Activity(None)
+        backend.screen_metrics=self.phone
+        backend.render(grid)
+        self.assertEqual(grid.cols,5)
+        self.assertEqual(grid.children[0]._native.setgridlayoutparams_value,
+                         (0,0,1,5,'fill','fill'))
+
     def test_gutter_does_not_consume_entire_compact_viewport(self):
         scale=LayoutScale(columns=12)
         width=scale.column_width(self.phone)
