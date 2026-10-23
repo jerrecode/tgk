@@ -200,6 +200,34 @@ class PersistentConfigTests(unittest.TestCase):
         for f in (self.dir/"text_styles").glob("*.json"):
             self.assertGreater(f.stat().st_size,0)
 
+    def test_direct_backend_uses_saved_runtime_and_layout_defaults(self):
+        from tgk.widgets import TermuxBackend
+        config.initialize_config()
+        config.patch_config({
+            "runtime":{"clock_callbacks_per_tick":39,"idle_sleep_seconds":0.03},
+            "layout":{"touch_target_dp":60},
+        })
+        backend=TermuxBackend(tg=object())
+        self.assertEqual(backend.clock_callbacks_per_tick,39)
+        self.assertAlmostEqual(backend.idle_sleep_seconds,0.03)
+        self.assertEqual(backend.layout_scale.touch_target_dp,60)
+
+    def test_icon_pack_uses_saved_raster_default_with_explicit_optout(self):
+        from tgk.icon_builder import build_assets
+        from unittest.mock import patch
+        config.initialize_config()
+        config.patch_config({"icons":{"raster":True,"low":24,"mid":64,
+                                      "high":128,"max_icons":3}})
+        with patch("tgk.icon_builder._raster_backend",
+                   side_effect=RuntimeError("raster backend selected")):
+            with self.assertRaisesRegex(RuntimeError,"raster backend selected"):
+                build_assets(self.tmp.name,names=["file"])
+        result=build_assets(self.tmp.name,names=["file"],raster=False)
+        self.assertFalse(result["raster"])
+        self.assertEqual(result["svg_files"],1)
+        manifest=json.loads((Path(self.tmp.name)/"icons"/"manifest.json").read_text())
+        self.assertEqual(manifest["sizes"],{"low":24,"mid":64,"high":128})
+
     def test_config_entrypoint_reports_json(self):
         with redirect_stdout(StringIO()) as output:
             self.assertEqual(config.main(["init"]),0)
