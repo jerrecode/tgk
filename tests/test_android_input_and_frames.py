@@ -38,8 +38,10 @@ class InputFrameTests(unittest.TestCase):
         self.assertEqual(field._native.settext_value,('ABCD',))
 
     def test_tab_and_screen_children_fill_frame_viewport(self):
+        class TabTG(FakeTG):
+            TabLayout=FakeTG._View
         for manager in (ScreenManager(),TabbedPanel()):
-            backend=TermuxBackend(tg=FakeTG)
+            backend=TermuxBackend(tg=TabTG)
             backend.activity=FakeTG.Activity(None)
             page_type=Tab if isinstance(manager,TabbedPanel) else Screen
             p=page_type(name='one')
