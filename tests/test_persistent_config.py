@@ -121,6 +121,37 @@ class PersistentConfigTests(unittest.TestCase):
             for name in ("low_res","mid_res","high_res","ico"):
                 self.assertEqual(list((Path(output)/"icons"/name).iterdir()),[])
 
+    def test_atomic_default_choices_preserve_preset_files_and_other_sections(self):
+        config.init_config()
+        files=config.paths()
+        initial_colors=files["colors"].read_bytes()
+        initial_typo=files["typography"].read_bytes()
+        config.set_defaults(palette="ocean",typography="terminal",
+                            options="accessible",orientation="landscape")
+        cfg=config.settings()
+        self.assertEqual(cfg["defaults"]["palette"],"ocean")
+        self.assertEqual(cfg["defaults"]["typography"],"terminal")
+        self.assertEqual(cfg["defaults"]["options"],"accessible")
+        self.assertEqual(cfg["ui"]["orientation"],"landscape")
+        self.assertEqual(config.layout_scale().touch_target_dp,56)
+        self.assertEqual(get_theme().name,"ocean")
+        self.assertEqual(get_text_style().family,"mono")
+        self.assertEqual(files["colors"].read_bytes(),initial_colors)
+        self.assertEqual(files["typography"].read_bytes(),initial_typo)
+        with self.assertRaises(ValueError):config.set_defaults(palette="invalid")
+        self.assertEqual(config.settings()["defaults"]["palette"],"ocean")
+        with self.assertRaises(ValueError):config.set_defaults()
+
+    def test_option_preset_runtime_is_not_overwritten_by_builtin_config(self):
+        config.init_config()
+        config.set_defaults(options="performance")
+        self.assertEqual(config.runtime_settings()["clock_max_callbacks"],64)
+        self.assertEqual(config.runtime_settings()["idle_sleep_ms"],8)
+        self._edit(config.paths()["config"],lambda d:d["runtime"].update(
+            clock_max_callbacks=35))
+        self.assertEqual(config.runtime_settings()["clock_max_callbacks"],35)
+        self.assertEqual(config.runtime_settings()["idle_sleep_ms"],8)
+
     def test_invalid_config_rejected_not_silently_ignored(self):
         config.init_config()
         invalid=[
