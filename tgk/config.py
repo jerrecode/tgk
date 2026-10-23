@@ -20,7 +20,7 @@ MAX_JSON_BYTES=512*1024
 DEFAULT_CONFIG={
     "schema_version":SCHEMA_VERSION,
     "ui":{"theme":"midnight","text_style":"body","orientation":"system",
-          "window_mode":"normal"},
+          "window_mode":"normal","option_profile":"balanced"},
     "layout":{
         "columns":12,"grid_unit_dp":4,"touch_target_dp":48,
         "small_spacing_dp":8,"medium_spacing_dp":16,"large_spacing_dp":24,
@@ -95,7 +95,7 @@ def validate_config(value):
     if type(config["schema_version"]) is not int or config["schema_version"]!=SCHEMA_VERSION:
         raise ValueError("unsupported TGK config schema_version")
     ui=config["ui"]
-    for key in ("theme","text_style"):_safe_name(ui[key])
+    for key in ("theme","text_style","option_profile"):_safe_name(ui[key])
     if ui["orientation"] not in ("system","portrait","landscape"):
         raise ValueError("ui.orientation must be system, portrait or landscape")
     if ui["window_mode"] not in ("normal","dialog","overlay"):
@@ -140,7 +140,19 @@ def load_config(path=None):
     try:info=path.stat()
     except FileNotFoundError:return deepcopy(DEFAULT_CONFIG)
     if not path.is_file():raise ValueError("TGK config path is not a file")
-    return deepcopy(_load_cached(str(path.resolve()),info.st_mtime_ns,info.st_size))
+    specified=deepcopy(_load_cached(str(path.resolve()),info.st_mtime_ns,info.st_size))
+    name=specified["ui"]["option_profile"]
+    # User-selectable option profiles are applied before explicit overrides.
+    # Old installers wrote ALL built-in keys, so treat unchanged built-in
+    # values as inherited to keep 0.6 configuration files compatible.
+    profile=option_config(name)
+    for section in ("layout","runtime","io","tools"):
+        for key,value in specified[section].items():
+            if value!=DEFAULT_CONFIG[section][key]:
+                profile[section][key]=value
+    profile["ui"].update(specified["ui"])
+    profile["icons"].update(specified["icons"])
+    return validate_config(profile)
 
 
 def option_config(name):

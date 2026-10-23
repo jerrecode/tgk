@@ -291,14 +291,19 @@ def _raster_backend():
 
 
 def build_assets(output_root,*,names=None,raster=False,overwrite=False,
-                 low=32,mid=96,high=256,max_icons=1500):
+                 low=None,mid=None,high=None,max_icons=None):
     """Build EVERYTHING in staging first; atomically publish only on success.
 
     output_root/icons/{svg,ico,low_res,mid_res,high_res}. The raster folders
     exist but remain empty for a deterministic SVG-only run.
     """
-    if type(max_icons) is not int or not 1<=max_icons<=5000:
-        raise ValueError("max_icons must be in 1..5000")
+    from .config import load_config
+    configured=load_config()["icons"]
+    low=configured["low"] if low is None else low
+    mid=configured["mid"] if mid is None else mid
+    high=configured["high"] if high is None else high
+    max_icons=configured["max_icons"] if max_icons is None else max_icons
+    if type(max_icons) is not int or not 1<=max_icons<=5000:        raise ValueError("max_icons must be in 1..5000")
     sizes=(low,mid,high)
     if any(type(z) is not int or not 8<=z<=1024 for z in sizes):
         raise ValueError("invalid icon sizes")
@@ -374,10 +379,10 @@ def main(argv=None):
     parser.add_argument("--icon",action="append",dest="names",help="select specific recipe names")
     parser.add_argument("--raster",action="store_true",help="also export PNG/JPG/ICO (CairoSVG+Pillow)")
     parser.add_argument("--overwrite",action="store_true",help="replace existing icons/ atomically")
-    parser.add_argument("--low",type=int,default=32)
-    parser.add_argument("--mid",type=int,default=96)
-    parser.add_argument("--high",type=int,default=256)
-    parser.add_argument("--max-icons",type=int,default=1500)
+    parser.add_argument("--low",type=int,default=None)
+    parser.add_argument("--mid",type=int,default=None)
+    parser.add_argument("--high",type=int,default=None)
+    parser.add_argument("--max-icons",type=int,default=None)
     args=parser.parse_args(argv)
     result=build_assets(args.output,names=args.names,raster=args.raster,
                         overwrite=args.overwrite,low=args.low,mid=args.mid,

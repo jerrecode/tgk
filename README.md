@@ -573,6 +573,26 @@ and cached by file modification metadata to avoid JSON parsing in the UI
 render hot path. Hardware maximum refresh rate, physical resolution and
 system inset dimensions remain unknown unless provided by Android APIs.
 
+## Configured option profiles and resource-bound defaults (0.6.1)
+
+Set `ui.option_profile` in `~/.config/tgk/config.json` to one of
+`balanced`, `battery_saver`, `performance`, `accessibility_touch`,
+`compact`, or `large_screen`, or the name of a JSON file in
+`~/.config/tgk/options/<name>.json`. The chosen option profile is applied
+to layout, runtime, I/O, and shell-tool defaults **before** user-edited,
+non-default per-field overrides. Legacy 0.6.0 config files containing the
+entire original set of defaults remain compatible, and explicit
+`App(layout_scale=..., clock_callbacks_per_tick=...)` values continue to
+win. A saved value identical to the original built-in default is treated as
+inherited; edit the option profile to override an inherited value to exactly
+that number.
+
+Chunked transfer, hashing, HTTPS download and bounded worker pools now
+inherit `io` limits automatically when no explicit `Limits` argument is
+provided. Icon asset generation inherits `icons.low/mid/high/max_icons`
+unless callers supply explicit arguments. These changes preserve the existing
+default behavior when no user configuration is present.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
