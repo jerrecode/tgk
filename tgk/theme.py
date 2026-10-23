@@ -191,7 +191,10 @@ def resolve_theme(theme=None, overrides=None):
     return base.override(**overrides) if overrides else base
 
 def load_theme(path):
-    data=json.loads(Path(path).read_text(encoding="utf-8"))
+    # Reuse the bounded JSON reader for user-editable palettes; a malformed
+    # multi-gigabyte preset should never exhaust RAM when a theme is selected.
+    from .config import _read_json
+    data=_read_json(path)
     if not isinstance(data,dict):raise ValueError("theme JSON must be an object")
     if set(data)-{"theme","colors","name"}:raise ValueError("unsupported theme file keys")
     base=data.get("theme",data.get("name",DEFAULT_NAME))
