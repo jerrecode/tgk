@@ -71,7 +71,8 @@ def __getattr__(name):
                 'initialize_config','load_config','validate_config',
                 'configured_theme','configured_text_style',
                 'configured_layout_scale','configured_io_limits',
-                'option_config','update_config','update_settings','patch_config','clear_config_cache'):
+                'option_config','update_config','update_settings','patch_config',
+                'audit_presets','clear_config_cache'):
         from importlib import import_module
         result=getattr(import_module('.config',__name__),name)
         globals()[name]=result

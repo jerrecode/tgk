@@ -417,10 +417,69 @@ def configured_io_limits():
     return Limits(**load_config()["io"])
 
 
+def audit_presets(root=None,*,max_files=2000,require_builtins=False):
+    """Read-only, size-bounded audit of *all* saved palette/style/option files.
+
+    Unlike load_config(), this detects inactive corrupt presets before a user
+    selects them. The scanner never follows symlinks or rewrites user content.
+    """
+    if type(max_files) is not int or not 1<=max_files<=5000:
+        raise ValueError("max_files must be an integer in 1..5000")
+    if type(require_builtins) is not bool:
+        raise ValueError("require_builtins must be boolean")
+    from .theme import PRESETS as COLOR_PRESETS,load_theme
+    from .typography import PRESETS as TEXT_PRESETS,resolve_text_style
+    base=Path(root).expanduser() if root is not None else config_home()
+    if base.is_symlink():raise ValueError("symlink preset root is not allowed: "+str(base))
+    catalogs={
+        "palettes":set(COLOR_PRESETS),
+        "text_styles":set(TEXT_PRESETS),
+        "options":set(OPTIONS),
+    }
+    counts={}
+    missing={}
+    inspected=0
+    for folder,expected in catalogs.items():
+        directory=base/folder
+        if directory.is_symlink():raise ValueError("symlink preset directory: "+str(directory))
+        if directory.exists() and not directory.is_dir():
+            raise ValueError("preset directory is not a directory: "+str(directory))
+        if not directory.exists():
+            files=[]
+        else:
+            files=sorted(p for p in directory.iterdir() if p.suffix==".json")
+        inspected+=len(files)
+        if inspected>max_files:raise ValueError("too many preset files to audit")
+        found=set()
+        for filename in files:
+            if filename.is_symlink() or not filename.is_file():
+                raise ValueError("nonregular or symlink preset file: "+str(filename))
+            name=_safe_name(filename.stem)
+            found.add(name)
+            if folder=="palettes":
+                load_theme(filename) # validated and <=MAX_JSON_BYTES
+            elif folder=="text_styles":
+                entry=_read_json(filename)
+                if set(entry)-{"style","properties"} or not isinstance(entry.get("properties"),dict):
+                    raise ValueError("invalid typography preset: "+str(filename))
+                resolve_text_style(entry.get("style",name),**entry["properties"])
+            else:
+                entry=_read_json(filename)
+                if entry.get("name")!=name or set(entry)-{"name","settings"}:
+                    raise ValueError("invalid option preset: "+str(filename))
+                validate_config(entry["settings"])
+        counts[folder]=len(found)
+        missing[folder]=sorted(expected-found)
+    if require_builtins and any(missing.values()):
+        raise ValueError("missing built-in TGK presets: "+json.dumps(missing,sort_keys=True))
+    return {"valid":True,"root":str(base),"counts":counts,
+            "total":inspected,"missing_builtins":missing}
+
+
 def main(argv=None):
     import argparse
     parser=argparse.ArgumentParser(description="Initialize/read persistent TGK configuration")
-    parser.add_argument("action",choices=("init","show","path","validate",
+    parser.add_argument("action",choices=("init","show","path","validate","audit",
                                           "get","set","reset","profiles"),nargs="?",default="show")
     parser.add_argument("section",nargs="?")
     parser.add_argument("key",nargs="?")
@@ -433,6 +492,8 @@ def main(argv=None):
         result={"path":str(config_path())}
     elif args.action=="show":
         result=load_config()
+    elif args.action=="audit":
+        result=audit_presets(require_builtins=True)
     elif args.action=="profiles":
         result={"available":sorted(set(OPTIONS)|{
             p.stem for p in (config_home()/"options").glob("*.json")
