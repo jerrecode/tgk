@@ -558,8 +558,9 @@ overrides always win over inherited theme values. A ContextVar theme/text
 selection overrides the persisted process default. Invalid config files
 produce actionable errors instead of silently replacing user data.
 
-The native event loop uses the configured callback budget; `Clock.tick()`
-remains explicitly adjustable. This facility does not give unsupported
+The native event loop uses the configured callback budget, read once at
+Activity startup; restart an App to apply edits to event-loop scheduling.
+`Clock.tick()` remains explicitly adjustable. This facility does not give unsupported
 Android APIs arbitrary hardware FPS, color-depth, or true window inset data.
 
 ## Shell tools
