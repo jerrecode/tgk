@@ -95,6 +95,70 @@ A successful Linux CI run does not verify the Android plugin connection, which n
 
 Non-editable Python package builds also compile the renderer from C source on the build device. Wheels are tagged for that platform/interpreter; they are never advertised as platform-independent `py3-none-any` packages. Source distributions exclude existing `.so` files so a stale host binary cannot be shipped as source. Editable installations still use the in-place renderer built by `install.sh` or `make build`.
 
+
+## Semantic themes, palette inheritance and interactive laboratories
+
+TGK now offers an **experimental centralized palette system** with twelve named presets:
+`midnight` (default), `amoled`, `paper`, `ocean`, `forest`, `sunset`,
+`cyberpunk`, `lavender`, `terminal`, `desert`, `high_contrast`, `ice`.
+Each preset supplies all 17 semantic roles: `status_bar`, `primary`, `background`,
+`surface`, `surface_alt`, `text`, `muted`, `accent`, `accent_secondary`,
+`button`, `button_text`, `outline`, `track`, `thumb`, `success`,
+`warning`, and `danger`. Colors are standard `#RGB`, `#RRGGBB`,
+or `#RRGGBBAA`; TGK translates to the protocol's `0xAABBGGRR` byte order.
+
+```python
+from tgk import App, Label, BoxLayout, set_theme, PRESETS
+set_theme("ocean", accent="#18D0F9")    # process/context default
+root = BoxLayout(orientation="vertical", colors={"surface":"#183752"})
+root.add_widget(Label(text="Hello", text_color="#FFDD22",
+                      background_color="#232A50", halign="center"))
+# App(theme="paper") overrides the default for an individual application.
+# In a running application: self.set_theme("sunset", accent="#FFA966")
+```
+
+Widget `colors={role: "#HEX"}` inherits into descendants and can override any
+semantic role, while `background_color="#HEX"` and `text_color="#HEX"`
+override the individual view. A child `theme="paper"` starts a separate preset
+subtree. Changes to those fields and `App.set_theme(...)` recolor existing
+native widgets and redraw custom C sliders, without discarding the widget tree.
+
+Native activity `settheme()` affects **only newly created Android Views**, so
+TGK invokes it before building the tree and uses per-view setters for live
+updates. Some Android control styling (notably native progress indicators,
+switch tracks/thumbs and platform-specific focus decorations) is outside the
+current protocol's per-widget color controls and may retain OS styling.
+
+```sh
+# Discover all scenarios; only --list runs without Android:
+python -m tgk.demos --list
+# 16 graduated cases: basic rows → grids → nesting → scroll → forms →
+# linked sliders → state transitions → gravity/weights → overrides → stress →
+# interactive palette editor → full workbench.
+python -m tgk.demos --demo 04_nesting --theme forest
+python -m tgk.demos --demo 09_anchors --theme paper
+python -m tgk.demos --demo 12_studio --theme cyberpunk
+python -m tgk.demos --demo 13_workbench --theme ocean --color accent=#FF55CC
+
+python examples/layout_lab.py --list
+python examples/theme_studio.py
+python examples/complex_workbench.py
+```
+
+The studio supports live switching between all 12 presets, eleven 0–100% shade
+swatches, arbitrary semantic-role hex input, separate R/G/B accent sliders,
+interactive form/state controls and a multi-action workbench. Layout probes test
+nested `BoxLayout` and `GridLayout`, `spacing`, `padding`, `weight`,
+text `halign`/`valign`, grid `align_row`/`align_col`, and state changes.
+These expose practical Termux:GUI limits: full Kivy positioning, anchoring,
+responsive constraint layout and dynamically inserting/removing native Views
+are **not** yet supported. View-gravity tests are not a substitute for true
+anchor positioning tests. Inspect Android layout behavior on-device.
+
+The tests construct all 16 scenarios without Android and check callbacks,
+inherited palette semantics, invalid colors and live updates. Android device
+rendering and interaction remain unverified by Linux CI.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.

@@ -77,6 +77,8 @@ class Widget(EventDispatcher):
         object.__setattr__(self,'parent',None)
         object.__setattr__(self,'ids',AttrDict())
         object.__setattr__(self,'_native',None)
+        object.__setattr__(self,'_theme_hook',None)
+        object.__setattr__(self,'_effective_theme',None)
         super().__init__(**kwargs)
         if type(self).__name__ not in (
             'Widget','BoxLayout','GridLayout','FloatLayout','ScrollView','Label',
@@ -115,6 +117,8 @@ class Widget(EventDispatcher):
         if isinstance(self,Slider) and name in ('value','min','max','step'):
             if self._slider_draw is not None:
                 self._slider_draw()
+        if name in ('theme','colors','background_color','text_color'):
+            if self._theme_hook is not None:self._theme_hook()
     def _read_image(self):
         from pathlib import Path
         path=Path(getattr(self,'source',''))
@@ -226,7 +230,7 @@ class _ClockHandle:
 Clock=_Clock()
 
 class TermuxBackend:
-    def __init__(self, tg=None):
+    def __init__(self, tg=None, theme=None):
         if tg is None:
             try: import termuxgui as tg
             except ImportError as exc:
@@ -234,6 +238,53 @@ class TermuxBackend:
         self.tg=tg
         self.connection=None; self.activity=None;self.nodes=[]
         self._slider_resources=[]
+        from .theme import resolve_theme, get_theme
+        self.theme=resolve_theme(theme or get_theme())
+
+    def _node_theme(self,node):
+        from .theme import resolve_theme
+        result=self.theme
+        ancestry=[]
+        current=node
+        while current is not None:
+            ancestry.append(current)
+            current=current.parent
+        for item in reversed(ancestry):
+            local=getattr(item,'theme',None)
+            if local:result=resolve_theme(local)
+            colors=getattr(item,'colors',None)
+            if colors:result=result.override(**colors)
+        return result
+
+    def _paint_node(self,node):
+        from .theme import tgui_color
+        selected=self._node_theme(node)
+        node._effective_theme=selected
+        native=node._native
+        if native is None:return
+        background=getattr(node,'background_color',None)
+        if background is None:
+            if node.parent is None:background=selected['background']
+            elif isinstance(node,(BoxLayout,GridLayout,FloatLayout,ScrollView)):background=selected['surface']
+            elif isinstance(node,(Button,TextInput)):background=selected['button' if isinstance(node,Button) else 'surface_alt']
+        if background is not None:
+            setter=getattr(native,'setbackgroundcolor',None)
+            if callable(setter):setter(tgui_color(background))
+        foreground=getattr(node,'text_color',None)
+        if foreground is None and isinstance(node,(Label,TextInput,CheckBox,Switch,ToggleButton,Spinner)):
+            foreground=selected['button_text' if isinstance(node,Button) else 'text']
+        if foreground is not None:
+            setter=getattr(native,'settextcolor',None)
+            if callable(setter):setter(tgui_color(foreground))
+        if isinstance(node,Slider) and node._slider_draw is not None:
+            node._slider_draw()
+
+    def apply_theme(self,theme=None):
+        """Recolor existing Views and redraw sliders, preserving local overrides."""
+        from .theme import resolve_theme
+        if theme is not None:self.theme=resolve_theme(theme)
+        for node in tuple(self.nodes):self._paint_node(node)
+
     def _make(self,node,parent):
         tg=self.tg;a=self.activity
         if isinstance(node,BoxLayout):
@@ -286,36 +337,69 @@ class TermuxBackend:
         elif isinstance(node,ProgressBar):native=tg.ProgressBar(a,parent)
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
+        node._theme_hook=lambda: self.apply_theme()
+        if isinstance(node,Slider):node._effective_theme=self._node_theme(node)
         if isinstance(node,Slider):node._slider_draw()
         if isinstance(node,Label):native.settextsize(int(node.font_size))
+        if isinstance(node,(Label,TextInput)):
+            horizontal={'left':0,'start':0,'center':1,'right':2,'end':2}
+            vertical={'top':0,'center':1,'bottom':2}
+            ha=getattr(node,'halign','left')
+            va=getattr(node,'valign','center')
+            if ha not in horizontal or va not in vertical:
+                raise ValueError('halign must be left/center/right; valign top/center/bottom')
+            gravity=getattr(native,'setgravity',None)
+            if callable(gravity):gravity(horizontal[ha],vertical[va])
         if isinstance(node,ProgressBar):native.setprogress(max(0,min(100,round(100*node.value/node.max if node.max else 0))))
         if hasattr(node,'height') and node.height is not None: native.setheight(int(node.height))
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
         if isinstance(node.parent,BoxLayout):
+            weight=getattr(node,'weight',None)
+            if weight is not None and (isinstance(weight,bool) or not isinstance(weight,int) or weight<0):
+                raise ValueError('weight must be a nonnegative integer')
             if node.parent.orientation=='vertical':
                 if not hasattr(node,'width'):native.setwidth(tg.View.MATCH_PARENT)
-                if isinstance(node,ScrollView) and not hasattr(node,'height'):
+                if weight is not None and not hasattr(node,'height'):
+                    native.setheight(0);native.setlinearlayoutparams(weight)
+                elif isinstance(node,ScrollView) and not hasattr(node,'height'):
                     native.setheight(0);native.setlinearlayoutparams(1)
-            elif node.parent.orientation=='horizontal' and not hasattr(node,'width'):
-                native.setwidth(0);native.setlinearlayoutparams(1)
+            else:
+                if weight is not None and not hasattr(node,'width'):
+                    native.setwidth(0);native.setlinearlayoutparams(weight)
+                elif not hasattr(node,'width'):
+                    native.setwidth(0);native.setlinearlayoutparams(1)
+            position=node.parent.children.index(node)
+            spacing=getattr(node.parent,'spacing',0)
+            if spacing and position:
+                native.setmargin(int(spacing),'top' if node.parent.orientation=='vertical' else 'left')
         if isinstance(node.parent,GridLayout):
             index=node.parent.children.index(node)
-            native.setgridlayoutparams(index//int(node.parent.cols),index%int(node.parent.cols))
+            rows=int(getattr(node,'row_span',1));cols=int(getattr(node,'col_span',1))
+            ar=getattr(node,'align_row','center');ac=getattr(node,'align_col','center')
+            allowed={'top','bottom','left','right','center','baseline','fill'}
+            if rows<1 or cols<1 or ar not in allowed or ac not in allowed:
+                raise ValueError('invalid grid spans or cell alignment')
+            native.setgridlayoutparams(index//int(node.parent.cols),index%int(node.parent.cols),
+                                       rows,cols,ar,ac)
         if isinstance(node,BoxLayout) and node.padding:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
+        self._paint_node(node)
         for child in node.children:self._make(child,native)
         return native
     @staticmethod
     def _draw_slider(node,buffer,canvas):
         from .canvas import rgba
+        from .theme import rgba_channels, get_theme
+        palette=node._effective_theme or get_theme()
+        def color(role):return rgba(*rgba_channels(palette[role]))
         left,right=22,canvas.width-23
-        canvas.clear(rgba(22,27,45))
-        canvas.rect(left,32,right-left+1,8,rgba(77,86,112))
+        canvas.clear(color('background'))
+        canvas.rect(left,32,right-left+1,8,color('track'))
         fraction=(node.value-node.min)/(node.max-node.min)
         x=left+round((right-left)*fraction)
-        canvas.rect(left,32,max(1,x-left+1),8,rgba(48,205,233))
-        canvas.circle(x,36,15,rgba(255,255,255))
-        canvas.circle(x,36,9,rgba(75,68,210))
+        canvas.rect(left,32,max(1,x-left+1),8,color('accent'))
+        canvas.circle(x,36,15,color('thumb'))
+        canvas.circle(x,36,9,color('primary'))
         buffer.blit()
         if node._native is not None:
             node._native.refresh()
@@ -405,6 +489,8 @@ class TermuxBackend:
             self.connection=c
             self.activity=self.tg.Activity(c,intercept=True)
             try:
+                from .theme import apply_activity_theme
+                apply_activity_theme(self.activity,self.theme)
                 self.render(root)
                 if on_start: on_start()
                 running=True
@@ -428,13 +514,25 @@ class TermuxBackend:
                 self.nodes.clear()
                 for node in root.walk():
                     node._native=None
+                    node._theme_hook=None
+                    node._effective_theme=None
                 self.activity=None
                 self.connection=None
 
 class App(EventDispatcher):
     _running_app=None
     def __init__(self,**kwargs):
+        from .theme import resolve_theme,get_theme
+        selected=kwargs.pop('theme',None)
         super().__init__(**kwargs);self.root=None;self._backend=None
+        self.theme=resolve_theme(selected or get_theme())
+
+    def set_theme(self,theme=None,**colors):
+        """Switch a running application's palette without rebuilding its tree."""
+        from .theme import resolve_theme
+        self.theme=resolve_theme(theme or self.theme,colors)
+        if self._backend is not None:self._backend.apply_theme(self.theme)
+        return self.theme
     @classmethod
     def get_running_app(cls):return App._running_app
     def build(self):return None
@@ -449,7 +547,7 @@ class App(EventDispatcher):
                 from .kv import Builder
                 self.root=Builder.load_file(type(self).__name__.removesuffix('App').lower()+'.kv')
             if not isinstance(self.root,Widget):raise TypeError('App.build must return a Widget')
-            self._backend=TermuxBackend()
+            self._backend=TermuxBackend(theme=self.theme)
             self._backend.run(self.root,self.on_start)
         finally:
             try:self.on_stop()

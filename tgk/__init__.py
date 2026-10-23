@@ -13,6 +13,13 @@ def __getattr__(name):
         result=getattr(import_module('.widgets',__name__),name)
         globals()[name]=result
         return result
+    if name in ('Theme','PRESETS','ROLES','DEFAULT_NAME','resolve_theme',
+                'get_theme','set_theme','load_theme','tgui_color',
+                'rgba_channels','normalize_color','apply_activity_theme'):
+        from importlib import import_module
+        result=getattr(import_module('.theme',__name__),name)
+        globals()[name]=result
+        return result
     if name=='Builder':
         from .kv import Builder
         globals()[name]=Builder
