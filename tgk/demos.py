@@ -448,8 +448,10 @@ class Gallery(App):
             lab=Laboratory(name,theme=self.theme,text_style=self.text_style)
             # Override the two Activity-specific Lab operations: all pages
             # belong to this Gallery App and its single native backend.
-            lab.stop=self.show_menu
-            lab.set_theme=self.set_theme
+            # App's EventDispatcher treats a public "stop" assignment as
+            # property "on_stop", so install host callbacks directly.
+            object.__setattr__(lab,'stop',self.show_menu)
+            object.__setattr__(lab,'set_theme',self.set_theme)
             page=Screen(name=name,title=name)
             body=lab.build()
             body.weight=1
