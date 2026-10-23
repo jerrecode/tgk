@@ -163,10 +163,23 @@ class ResponsiveGrid(GridLayout):
             raise ValueError("ResponsiveGrid.cols must be within 1..32")
         if type(span_units) is not int or not 1<=span_units<=32:
             raise ValueError("span_units must be within 1..32")
+        object.__setattr__(self,'_responsive_ready',False)
+        object.__setattr__(self,'_syncing_columns',False)
         object.__setattr__(self,'_explicit_columns',cols is not None)
         object.__setattr__(self,'span_units',span_units)
         super().__init__(cols=12 if cols is None else cols,
                          rows=kwargs.pop('rows',0),**kwargs)
+        object.__setattr__(self,'_responsive_ready',True)
+
+    def __setattr__(self,name,value):
+        if name=='cols' and getattr(self,'_responsive_ready',False):
+            if type(value) is not int or not 1<=value<=32:
+                raise ValueError("ResponsiveGrid.cols must be within 1..32")
+            if getattr(self,'_native',None) is not None and value!=self.cols:
+                raise RuntimeError("native GridLayout columns cannot change after rendering")
+            if not self._syncing_columns:
+                object.__setattr__(self,'_explicit_columns',True)
+        super().__setattr__(name,value)
 
 class FloatLayout(Widget): pass # native FrameLayout, limited Kivy positioning
 class ScrollView(Widget): pass
@@ -556,7 +569,9 @@ class TermuxBackend:
             native=tg.LinearLayout(a,parent,vertical=node.orientation=='vertical')
         elif isinstance(node,GridLayout):
             if isinstance(node,ResponsiveGrid) and not node._explicit_columns:
-                node.cols=self.layout_scale.columns
+                object.__setattr__(node,'_syncing_columns',True)
+                try:node.cols=self.layout_scale.columns
+                finally:object.__setattr__(node,'_syncing_columns',False)
             cols=int(node.cols or max(1,(len(node.children)+int(node.rows)-1)//int(node.rows)))
             rows=len(node.children) if isinstance(node,ResponsiveGrid) else int(
                 node.rows or (len(node.children)+cols-1)//cols)
