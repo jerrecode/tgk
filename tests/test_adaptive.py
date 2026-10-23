@@ -109,7 +109,7 @@ class SemanticTokenTests(unittest.TestCase):
         changed=original.override(button='#112233')
         self.assertNotEqual(changed['button_pressed'],original['button_pressed'])
         self.assertNotEqual(changed['button_active'],original['button_active'])
-        self.assertEqual(changed['button_pressed'],blend_color('#112233','#000000',.26)+'FF')
+        self.assertEqual(changed['button_pressed'],blend_color('#112233','#000000',.26))
         selected=original.override(button='#112233',button_pressed='#AABBCC')
         self.assertEqual(selected['button_pressed'],'#AABBCCFF')
         self.assertEqual(selected['button_active'],changed['button_active'])
