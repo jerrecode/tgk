@@ -69,6 +69,20 @@ class ScreenMetrics:
     def aspect_ratio(self):return self.width_dp/self.height_dp
 
     @property
+    def safe_content_size_dp(self):
+        """Available content when actual *additional* insets are known.
+
+        Android standard Activity windows already exclude system chrome, so
+        unknown insets default to no extra subtraction (never guessed).
+        """
+        top=0.0 if self.inset_top_dp is None else self.inset_top_dp
+        bottom=0.0 if self.inset_bottom_dp is None else self.inset_bottom_dp
+        return (self.width_dp,max(1.0,self.height_dp-top-bottom))
+
+    @property
+    def is_landscape(self):return self.orientation=="landscape"
+
+    @property
     def approx_window_px(self):
         return (round(self.width_dp*self.density),
                 round(self.height_dp*self.density))
@@ -104,37 +118,72 @@ class LayoutScale:
     medium_margin_dp:int=24
     expanded_margin_dp:int=32
     max_content_width_dp:int=1200
+    compact_breakpoint_dp:int=600
+    expanded_breakpoint_dp:int=840
+    font_touch_scale_limit_pct:int=150
 
     def __post_init__(self):
         for name in self.__dataclass_fields__:
             val=getattr(self,name)
             if type(val) is not int or val<=0:raise ValueError(name+" must be positive integer")
         if self.columns>32:raise ValueError("columns must be <= 32")
+        if not 240<=self.compact_breakpoint_dp<self.expanded_breakpoint_dp<=3000:
+            raise ValueError("breakpoints must increase within 240..3000 dp")
+        if not 100<=self.font_touch_scale_limit_pct<=250:
+            raise ValueError("font touch scale limit must be 100..250 percent")
+
+    def size_class(self,metrics):
+        if metrics.width_dp<self.compact_breakpoint_dp:return "compact"
+        if metrics.width_dp<self.expanded_breakpoint_dp:return "medium"
+        return "expanded"
 
     def margin(self,metrics):
         return {"compact":self.compact_margin_dp,"medium":self.medium_margin_dp,
-                "expanded":self.expanded_margin_dp}[metrics.size_class]
+                "expanded":self.expanded_margin_dp}[self.size_class(metrics)]
 
-    def column_width(self,metrics,gutter_dp=None):
+    def available_width(self,metrics):
+        return max(1.0,min(metrics.width_dp,self.max_content_width_dp)-
+                   2*self.margin(metrics))
+
+    def column_width(self,metrics,gutter_dp=None,columns=None):
         gutter=self.medium_spacing_dp if gutter_dp is None else gutter_dp
-        if gutter<0:raise ValueError("gutter cannot be negative")
-        usable=min(metrics.width_dp,self.max_content_width_dp)-2*self.margin(metrics)
-        return max(1.0,(usable-(self.columns-1)*gutter)/self.columns)
+        if isinstance(gutter,bool) or not isinstance(gutter,(int,float)) or not math.isfinite(gutter) or gutter<0:
+            raise ValueError("gutter must be finite nonnegative")
+        n=self.columns if columns is None else columns
+        if type(n) is not int or not 1<=n<=32:
+            raise ValueError("invalid column count")
+        usable=self.available_width(metrics)
+        return max(1.0,(usable-(n-1)*gutter)/n)
 
     def dp(self,size):
         """Round a dimension to the 4-dp spacing grid, not physical pixels."""
         if not math.isfinite(float(size)) or size<0:raise ValueError("invalid dimension")
         return round(size/self.grid_unit_dp)*self.grid_unit_dp
 
-    def touch_height(self,requested=None):
-        if requested is None:return self.touch_target_dp
-        return max(self.touch_target_dp,math.ceil(_positive(requested,"requested height")))
+    def touch_height(self,requested=None,metrics=None):
+        """Keep targets accessible when Android font size is enlarged.
+
+        Font scale is read from Android; cap the touch-area multiplier to
+        avoid turning each control into a screen-height button.
+        """
+        multiplier=1.0 if metrics is None else min(
+            max(1.0,metrics.font_scale),self.font_touch_scale_limit_pct/100)
+        minimum=math.ceil(self.touch_target_dp*multiplier)
+        if requested is None:return minimum
+        return max(minimum,math.ceil(_positive(requested,"requested height")))
 
 
-def arrange_spans(children,columns=12,metrics=None):
+def arrange_spans(children,columns=12,metrics=None,*,span_units=None,size_class=None):
     """Pure first-fit row packing of child spans with deterministic bounds."""
-    if type(columns) is not int or columns<1:raise ValueError("invalid column count")
+    if type(columns) is not int or not 1<=columns<=32:
+        raise ValueError("invalid column count")
+    units=columns if span_units is None else span_units
+    if type(units) is not int or not 1<=units<=32:
+        raise ValueError("invalid span units")
     if metrics is None:metrics=ScreenMetrics(393,852)
+    selected_class=metrics.size_class if size_class is None else size_class
+    if selected_class not in ("compact","medium","expanded"):
+        raise ValueError("invalid screen class")
     positions=[]
     row=0;col=0
     for widget in children:
@@ -142,12 +191,15 @@ def arrange_spans(children,columns=12,metrics=None):
         if requested is None:
             choices={"compact":"span_compact","medium":"span_medium",
                      "expanded":"span_expanded"}
-            requested=getattr(widget,choices[metrics.size_class],columns)
-        if type(requested) is not int or not 1<=requested<=columns:
+            requested=getattr(widget,choices[selected_class],units)
+        if type(requested) is not int or not 1<=requested<=units:
             raise ValueError("invalid responsive grid span")
-        if col+requested>columns:row+=1;col=0
-        positions.append((row,col,1,requested))
-        col+=requested
+        # Preserve the familiar 12-unit design contract even when the native
+        # grid is configured for 4, 8, 16 or 24 physical columns.
+        span=max(1,min(columns,math.ceil(requested*columns/units)))
+        if col+span>columns:row+=1;col=0
+        positions.append((row,col,1,span))
+        col+=span
         if col==columns:row+=1;col=0
     return positions
 
