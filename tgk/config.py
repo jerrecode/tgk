@@ -19,6 +19,7 @@ SCHEMA_VERSION=1
 MAX_JSON_BYTES=512*1024
 DEFAULT_CONFIG={
     "schema_version":SCHEMA_VERSION,
+    "pinned":[],
     "ui":{"theme":"midnight","text_style":"body","orientation":"system",
           "window_mode":"normal","option_profile":"balanced"},
     "layout":{
@@ -94,6 +95,13 @@ def validate_config(value):
     _merge(config,value)
     if type(config["schema_version"]) is not int or config["schema_version"]!=SCHEMA_VERSION:
         raise ValueError("unsupported TGK config schema_version")
+    pins=config["pinned"]
+    if type(pins) is not list or len(pins)>128 or any(type(x) is not str for x in pins):
+        raise ValueError("pinned must be a bounded list")
+    valid={f"{section}.{field}" for section in ("ui","layout","runtime","io","icons","tools")
+           for field in DEFAULT_CONFIG[section]}
+    if len(set(pins))!=len(pins) or any(x not in valid for x in pins):
+        raise ValueError("unknown or duplicated pinned setting")
     ui=config["ui"]
     for key in ("theme","text_style","option_profile"):_safe_name(ui[key])
     if ui["orientation"] not in ("system","portrait","landscape"):
@@ -146,12 +154,14 @@ def load_config(path=None):
     # Old installers wrote ALL built-in keys, so treat unchanged built-in
     # values as inherited to keep 0.6 configuration files compatible.
     profile=option_config(name)
+    pins=set(specified["pinned"])
     for section in ("layout","runtime","io","tools"):
         for key,value in specified[section].items():
-            if value!=DEFAULT_CONFIG[section][key]:
+            if value!=DEFAULT_CONFIG[section][key] or f"{section}.{key}" in pins:
                 profile[section][key]=value
     profile["ui"].update(specified["ui"])
     profile["icons"].update(specified["icons"])
+    profile["pinned"]=specified["pinned"]
     return validate_config(profile)
 
 
@@ -160,15 +170,15 @@ def clear_config_cache():
     _load_cached.cache_clear()
 
 
-def patch_config(changes):
+def patch_config(changes,*,reset=()):
     """Atomically replace multiple validated config fields in one transaction.
 
     The existing file is never replaced if validation or serialization fails.
     No user preset file is overwritten. For concurrent writers use one process
     or an external lock; this method prevents torn writes, not lost updates.
     """
-    if not isinstance(changes,dict) or not changes:
-        raise ValueError("configuration patch must be a nonempty object")
+    if not isinstance(changes,dict) or (not changes and not reset):
+        raise ValueError("configuration patch must include changes or resets")
     for section,fields in changes.items():
         _safe_name(section)
         if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
@@ -179,6 +189,14 @@ def patch_config(changes):
             _safe_name(key)
             if key not in DEFAULT_CONFIG[section]:
                 raise ValueError("unknown TGK config field: "+section+"."+key)
+    for entry in reset:
+        if not isinstance(entry,(tuple,list)) or len(entry)!=2:
+            raise ValueError("reset entries must be section/key pairs")
+        section,key=entry
+        _safe_name(section);_safe_name(key)
+        if section not in ("ui","layout","runtime","io","icons","tools") or key not in DEFAULT_CONFIG[section]:
+            raise ValueError("unknown reset field")
+        if key in changes.get(section,{}):raise ValueError("conflicting set and reset")
     directory=config_home()
     path=config_path()
     if directory.is_symlink() or path.is_symlink():
@@ -190,6 +208,13 @@ def patch_config(changes):
     merged=deepcopy(DEFAULT_CONFIG)
     _merge(merged,stored)
     _merge(merged,changes)
+    pins=set(merged["pinned"])
+    for section,fields in changes.items():
+        for key in fields:pins.add(f"{section}.{key}")
+    for section,key in reset:
+        merged[section][key]=DEFAULT_CONFIG[section][key]
+        pins.discard(f"{section}.{key}")
+    merged["pinned"]=sorted(pins)
     validate_config(merged)
     # Validate selected preset before writing; a syntactically valid name
     # without an installed profile must not poison the active config file.
@@ -232,10 +257,11 @@ def patch_config(changes):
     return load_config()
 
 
-def update_config(section,key,value):
-    """Atomically update one named field; preserves unrelated saved fields."""
+def update_config(section,key,value,*,reset=False):
+    """Pin one persisted setting, or release it back to profile inheritance."""
     _safe_name(section)
     _safe_name(key)
+    if reset:return patch_config({},reset=((section,key),))
     return patch_config({section:{key:value}})
 
 
