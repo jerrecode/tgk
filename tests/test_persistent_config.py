@@ -138,6 +138,69 @@ class PersistentConfigTests(unittest.TestCase):
         self.assertEqual(config.configured_io_limits().workers,3)
         with self.assertRaises(ValueError):config.option_config("../outside")
 
+    def test_option_profile_selection_and_explicit_single_field_overrides(self):
+        config.initialize_config()
+        initial=(self.dir/"config.json").read_bytes()
+        effective=config.update_config("ui","option_profile","battery_saver")
+        self.assertEqual(effective["io"]["workers"],1)
+        self.assertEqual(effective["runtime"]["clock_callbacks_per_tick"],48)
+        self.assertEqual(effective["tools"]["canvas_fps"],20)
+        # Values specifically changed away from shipped defaults stay pinned,
+        # even if a different profile would otherwise supply that field.
+        effective=config.update_config("io","workers",7)
+        self.assertEqual(effective["io"]["workers"],7)
+        self.assertEqual(effective["runtime"]["clock_callbacks_per_tick"],48)
+        effective=config.update_config("ui","option_profile","accessibility_touch")
+        self.assertEqual(effective["layout"]["touch_target_dp"],64)
+        self.assertEqual(effective["io"]["workers"],7)
+        previous=(self.dir/"config.json").read_bytes()
+        with self.assertRaises(ValueError):
+            config.update_config("ui","option_profile","missing_profile")
+        self.assertEqual(previous,(self.dir/"config.json").read_bytes())
+        with self.assertRaises(ValueError):
+            config.update_config("io","workers",999)
+        self.assertEqual(previous,(self.dir/"config.json").read_bytes())
+        self.assertNotEqual(initial,previous)
+
+    def test_atomic_writer_refuses_symlink_and_preserves_source(self):
+        config.initialize_config()
+        target=self.dir/"config.json"
+        original=target.read_bytes()
+        outside=self.dir.parent/"shared_config.json"
+        outside.write_bytes(original)
+        target.unlink()
+        target.symlink_to(outside)
+        with self.assertRaisesRegex(ValueError,"symlink"):
+            config.update_config("ui","theme","paper")
+        self.assertEqual(outside.read_bytes(),original)
+
+    def test_direct_backend_reads_configured_layout_and_scheduler(self):
+        from tgk.widgets import TermuxBackend
+        config.initialize_config()
+        config.update_config("layout","touch_target_dp",60)
+        config.update_config("runtime","clock_callbacks_per_tick",37)
+        config.update_config("runtime","idle_sleep_seconds",.03)
+        backend=TermuxBackend(tg=object())
+        self.assertEqual(backend.layout_scale.touch_target_dp,60)
+        self.assertEqual(backend.clock_callbacks_per_tick,37)
+        self.assertAlmostEqual(backend.idle_sleep_seconds,.03)
+
+    def test_svg_icon_export_uses_saved_default_dimensions(self):
+        from tgk.icon_builder import build_assets
+        config.initialize_config()
+        config.update_config("icons","low",24)
+        config.update_config("icons","mid",64)
+        config.update_config("icons","high",128)
+        config.update_config("icons","max_icons",3)
+        result=build_assets(self.tmp.name,names=("file","folder"),raster=False)
+        self.assertEqual(result["count"],2)
+        manifest=json.loads((Path(self.tmp.name)/"icons"/"manifest.json").read_text())
+        self.assertEqual(manifest["sizes"],{"low":24,"mid":64,"high":128})
+        self.assertTrue((Path(self.tmp.name)/"icons"/"svg"/"file.svg").exists())
+        with self.assertRaises(ValueError):
+            build_assets(self.tmp.name,names=("file","folder","play","close"),
+                         raster=False,overwrite=True)
+
     def test_config_entrypoint_reports_json(self):
         with redirect_stdout(StringIO()) as output:
             self.assertEqual(config.main(["init"]),0)
