@@ -50,6 +50,11 @@ def __getattr__(name):
         result=getattr(import_module('.adaptive',__name__),name)
         globals()[name]=result
         return result
+    if name in ('SizeSpec','ResolvedSize','resolve_size'):
+        from importlib import import_module
+        result=getattr(import_module('.sizing',__name__),name)
+        globals()[name]=result
+        return result
     if name in ('ComponentStyle','TableStyle','DEFAULT_STYLES',
                 'resolve_component_style','table_html'):
         from importlib import import_module
