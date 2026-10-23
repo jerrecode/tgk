@@ -269,6 +269,21 @@ pan/zoom C canvas, and a nested screen stack. It also includes an in-Activity
 popup. This source is independently unit-tested on Linux, but Android
 touch/overlay/TabLayout behavior is awaiting **real hardware validation**.
 
+## Native event indexing and large widget trees
+
+Native click, touch, text and tab selection events use a dictionary indexed
+by the stable scalar View ID returned from Termux:GUI. This removes the
+previous O(number_of_widgets) linear search from the event hot path;
+ordinary dispatch is O(1) average, while custom bindings without scalar IDs
+retain a compatibility fallback. Native View objects themselves are **never**
+dictionary keys (the Termux:GUI Python bindings may make them unhashable).
+The index is cleared with the Activity on shutdown.
+
+`Widget.walk()` uses iterative preorder traversal instead of recursion,
+so traversing very deeply nested widget models does not fail from Python's
+recursion limit. Real Android-native nesting depth and layout performance
+still require separate device testing.
+
 ## Targeted theme repaint and resource-bounded data pipelines
 
 For Android drag responsiveness, a local `Widget.background_color` or
