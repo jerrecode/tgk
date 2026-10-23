@@ -486,6 +486,8 @@ class TermuxBackend:
         for node in tuple(self.nodes):
             if isinstance(node,ResponsiveGrid):
                 self._reflow_grid(node)
+            if isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider)):
+                self._refresh_touch_height(node)
             if getattr(node,'size_spec',None) is not None:
                 self._apply_size_spec(node)
         return measured
@@ -494,7 +496,8 @@ class TermuxBackend:
         from .adaptive import arrange_spans,ScreenMetrics
         metrics=self.screen_metrics or ScreenMetrics(393,852)
         positions=arrange_spans(node.children,columns=int(node.cols),
-                                span_units=node.span_units,metrics=metrics)
+                                span_units=node.span_units,metrics=metrics,
+                                size_class=self.layout_scale.size_class(metrics))
         for child,(row,col,rows,cols) in zip(node.children,positions):
             native=child._native
             if native is not None:
@@ -502,6 +505,35 @@ class TermuxBackend:
                 if child._applied_native_style.get('grid_position')!=signature:
                     native.setgridlayoutparams(row,col,rows,cols,'fill','fill')
                     child._applied_native_style['grid_position']=signature
+
+    def _refresh_touch_height(self,node):
+        """Refresh only genuinely widget-managed dimensions.
+
+        A root with MATCH_PARENT, a vertically weighted child, or an opted-in
+        SizeSpec owns its height through a different layout contract.
+        Refreshing the touch minimum must never overwrite those native modes.
+        """
+        if node._native is None or getattr(node,'size_spec',None) is not None:
+            return
+        if getattr(node,'allow_small_touch_target',False):
+            return
+        if node.parent is None and not hasattr(node,'height'):
+            return
+        if (isinstance(node.parent,BoxLayout) and
+            node.parent.orientation=='vertical' and
+            getattr(node,'weight',None) is not None and
+            not hasattr(node,'height')):
+            return
+        component=getattr(node,'component_style',None)
+        if isinstance(component,str):
+            from .style_tokens import resolve_component_style
+            component=resolve_component_style(component)
+        minimum=self.layout_scale.touch_height(metrics=self.screen_metrics)
+        if component is not None:minimum=max(minimum,component.min_touch_dp)
+        if isinstance(node,Slider):minimum=max(72,minimum)
+        requested=getattr(node,'height',None)
+        value=max(minimum,math.ceil(requested) if requested is not None else 0)
+        self._cached_set(node,'touch_height','setheight',value)
 
     def _apply_size_spec(self,node):
         """Update an opted-in view's resolved dp dimensions, only if changed."""
@@ -666,12 +698,9 @@ class TermuxBackend:
             raise TypeError('component_style must be a named preset or ComponentStyle')
         interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
         requested=getattr(node,'height',None)
-        if interactive and not getattr(node,'allow_small_touch_target',False):
-            minimum=component.min_touch_dp if component is not None else self.layout_scale.touch_target_dp
-            if requested is None:
-                requested=max(72,minimum) if isinstance(node,Slider) else minimum
-            else:requested=max(float(requested),minimum)
         if requested is not None:native.setheight(int(math.ceil(requested)))
+        if interactive and getattr(node,'size_spec',None) is None:
+            self._refresh_touch_height(node)
         requested_width=getattr(node,'width',None)
         if interactive and requested_width is not None and not getattr(node,'allow_small_touch_target',False):
             minimum_width=component.min_touch_dp if component is not None else self.layout_scale.touch_target_dp
