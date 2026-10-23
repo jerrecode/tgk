@@ -341,19 +341,46 @@ class TermuxBackend:
         if isinstance(node,Slider):node._effective_theme=self._node_theme(node)
         if isinstance(node,Slider):node._slider_draw()
         if isinstance(node,Label):native.settextsize(int(node.font_size))
+        if isinstance(node,(Label,TextInput)):
+            horizontal={'left':0,'start':0,'center':1,'right':2,'end':2}
+            vertical={'top':0,'center':1,'bottom':2}
+            ha=getattr(node,'halign','left')
+            va=getattr(node,'valign','center')
+            if ha not in horizontal or va not in vertical:
+                raise ValueError('halign must be left/center/right; valign top/center/bottom')
+            gravity=getattr(native,'setgravity',None)
+            if callable(gravity):gravity(horizontal[ha],vertical[va])
         if isinstance(node,ProgressBar):native.setprogress(max(0,min(100,round(100*node.value/node.max if node.max else 0))))
         if hasattr(node,'height') and node.height is not None: native.setheight(int(node.height))
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
         if isinstance(node.parent,BoxLayout):
+            weight=getattr(node,'weight',None)
+            if weight is not None and (isinstance(weight,bool) or not isinstance(weight,int) or weight<0):
+                raise ValueError('weight must be a nonnegative integer')
             if node.parent.orientation=='vertical':
                 if not hasattr(node,'width'):native.setwidth(tg.View.MATCH_PARENT)
-                if isinstance(node,ScrollView) and not hasattr(node,'height'):
+                if weight is not None and not hasattr(node,'height'):
+                    native.setheight(0);native.setlinearlayoutparams(weight)
+                elif isinstance(node,ScrollView) and not hasattr(node,'height'):
                     native.setheight(0);native.setlinearlayoutparams(1)
-            elif node.parent.orientation=='horizontal' and not hasattr(node,'width'):
-                native.setwidth(0);native.setlinearlayoutparams(1)
+            else:
+                if weight is not None and not hasattr(node,'width'):
+                    native.setwidth(0);native.setlinearlayoutparams(weight)
+                elif not hasattr(node,'width'):
+                    native.setwidth(0);native.setlinearlayoutparams(1)
+            position=node.parent.children.index(node)
+            spacing=getattr(node.parent,'spacing',0)
+            if spacing and position:
+                native.setmargin(int(spacing),'top' if node.parent.orientation=='vertical' else 'left')
         if isinstance(node.parent,GridLayout):
             index=node.parent.children.index(node)
-            native.setgridlayoutparams(index//int(node.parent.cols),index%int(node.parent.cols))
+            rows=int(getattr(node,'row_span',1));cols=int(getattr(node,'col_span',1))
+            ar=getattr(node,'align_row','center');ac=getattr(node,'align_col','center')
+            allowed={'top','bottom','left','right','center','baseline','fill'}
+            if rows<1 or cols<1 or ar not in allowed or ac not in allowed:
+                raise ValueError('invalid grid spans or cell alignment')
+            native.setgridlayoutparams(index//int(node.parent.cols),index%int(node.parent.cols),
+                                       rows,cols,ar,ac)
         if isinstance(node,BoxLayout) and node.padding:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
         self._paint_node(node)
