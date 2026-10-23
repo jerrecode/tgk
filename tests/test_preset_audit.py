@@ -76,6 +76,22 @@ class PresetAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"missing built-in"):
             config.audit_presets(require_builtins=True)
 
+    def test_installer_runs_full_readonly_preset_validation(self):
+        """Never release a copied install containing inactive broken presets."""
+        script=(Path(__file__).resolve().parents[1]/"install.sh").read_text()
+        self.assertIn('"$PYTHON" -m tgk.config init',script)
+        self.assertIn('"$PYTHON" -m tgk.config validate',script)
+        self.assertIn('"$PYTHON" -m tgk.config audit',script)
+        # All checks must run after create-only initialization.
+        self.assertLess(script.index('"$PYTHON" -m tgk.config init'),
+                        script.index('"$PYTHON" -m tgk.config audit'))
+        filename=self.root/"palettes"/"sunset.json"
+        filename.write_text('{"theme":"sunset","colors":{"accent":"invalid"}}')
+        original=filename.read_bytes()
+        with self.assertRaises(ValueError):
+            config.audit_presets(require_builtins=True)
+        self.assertEqual(filename.read_bytes(),original)
+
     def test_readonly_audit_does_not_change_files(self):
         before={str(p.relative_to(self.root)):p.read_bytes()
                 for p in self.root.rglob("*.json")}
