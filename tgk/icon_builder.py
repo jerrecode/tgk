@@ -290,7 +290,7 @@ def _raster_backend():
     return cairosvg,Image
 
 
-def build_assets(output_root,*,names=None,raster=False,overwrite=False,
+def build_assets(output_root,*,names=None,raster=None,overwrite=False,
                  low=None,mid=None,high=None,max_icons=None):
     """Build EVERYTHING in staging first; atomically publish only on success.
 
@@ -299,6 +299,8 @@ def build_assets(output_root,*,names=None,raster=False,overwrite=False,
     """
     from .config import load_config
     configured=load_config()["icons"]
+    raster=configured["raster"] if raster is None else raster
+    if type(raster) is not bool:raise ValueError("raster must be boolean")
     low=configured["low"] if low is None else low
     mid=configured["mid"] if mid is None else mid
     high=configured["high"] if high is None else high
