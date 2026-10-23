@@ -68,7 +68,9 @@ def _manifest_if_untouched(folder):
         manifest = json.loads(raw)
         if (not isinstance(manifest, dict) or
                 manifest.get("source") != "tgk.icon_builder" or
-                manifest.get("schema_version") != 1):
+                manifest.get("schema_version") != 1 or
+                type(manifest.get("geometry_revision", 0)) is not int or
+                manifest.get("geometry_revision", 0) < 0):
             return None
         entries = manifest.get("files")
         if not isinstance(entries, dict) or not 1 <= len(entries) <= _MAX_FILES:
