@@ -603,7 +603,7 @@ class TermuxBackend:
         indexed=type(match) in (int,str)
         if e.type=='itemselected':
             parent=self._tab_index.get(match) if indexed else None
-            if parent is None:
+            if parent is None and (not indexed or not self._tab_index):
                 parent=next((item for item in self.nodes if
                              isinstance(item,TabbedPanel) and match==item._tab_bar),None)
             if parent is not None:
@@ -616,7 +616,7 @@ class TermuxBackend:
                 finally:parent._tab_syncing=False
                 return
         node=self._native_index.get(match) if indexed else None
-        if node is None:
+        if node is None and (not indexed or not self._native_index):
             node=next((item for item in self.nodes if match==item._native),None)
         if node is not None:
             if e.type=='touch' and isinstance(node,Slider):
