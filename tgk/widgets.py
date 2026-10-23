@@ -486,6 +486,8 @@ class TermuxBackend:
         for node in tuple(self.nodes):
             if isinstance(node,ResponsiveGrid):
                 self._reflow_grid(node)
+            if getattr(node,'size_spec',None) is not None:
+                self._apply_size_spec(node)
         return measured
 
     def _reflow_grid(self,node):
@@ -500,6 +502,25 @@ class TermuxBackend:
                 if child._applied_native_style.get('grid_position')!=signature:
                     native.setgridlayoutparams(row,col,rows,cols,'fill','fill')
                     child._applied_native_style['grid_position']=signature
+
+    def _apply_size_spec(self,node):
+        """Update an opted-in view's resolved dp dimensions, only if changed."""
+        from .sizing import SizeSpec,resolve_size
+        spec=getattr(node,'size_spec',None)
+        if spec is None:return
+        if not isinstance(spec,SizeSpec):raise TypeError('size_spec must be a SizeSpec')
+        if self.screen_metrics is None or node._native is None:return
+        interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
+        result=resolve_size(spec,self.screen_metrics,
+                            touch_target_dp=self.layout_scale.touch_target_dp,
+                            interactive=interactive,
+                            intrinsic_width_dp=getattr(node,'width',None),
+                            intrinsic_height_dp=getattr(node,'height',None))
+        if result.width_dp is not None:
+            self._cached_set(node,'spec_width','setwidth',result.width_dp)
+        if result.height_dp is not None:
+            self._cached_set(node,'spec_height','setheight',result.height_dp)
+        return result
 
     def _make(self,node,parent):
         """Build a native view tree iteratively, with postorder finalization.
@@ -698,6 +719,7 @@ class TermuxBackend:
             native.setmargin(int(component.margin_dp))
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
+        self._apply_size_spec(node)
         self._paint_node(node)
         return native,(tab_content if tab_content is not None else native)
     @staticmethod

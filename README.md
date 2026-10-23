@@ -660,6 +660,31 @@ provided. Icon asset generation inherits `icons.low/mid/high/max_icons`
 unless callers supply explicit arguments. These changes preserve the existing
 default behavior when no user configuration is present.
 
+## Opt-in viewport sizing policies (TGK 0.6.5)
+
+Use `SizeSpec` to constrain an individual native Android widget to the
+reported **content-window dp** dimensions, with numeric dp or fractional
+width/height, independent limits, fraction caps, margins, optional aspect
+ratio containment and configured touch-target minima. This does not alter
+existing widgets unless `size_spec` is explicitly supplied.
+
+```python
+from tgk import Button,SizeSpec
+btn=Button(text="Open",size_spec=SizeSpec(
+    width_fraction=.45,height_dp=56,max_width_dp=240,
+    max_height_fraction=.2))
+```
+
+An Activity `config` event updates opted-in View dimensions without
+recreating native Views or repeatedly calling setters with unchanged values.
+If Termux:GUI cannot report window dimensions, ordinary native sizing remains
+in control; TGK does **not** invent hardware metrics or insets.
+
+`SizeSpec(fit="contain",aspect_ratio=...) ` preserves a ratio inside both
+specified dimensions. Explicit maxima and the actual viewport always take
+precedence over requested sizes to avoid overflowing compact screens.
+`tgk size-plan` in matching TGK Tools previews the same policy offline.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
