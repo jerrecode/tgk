@@ -142,7 +142,7 @@ class BackendTests(unittest.TestCase):
         FakeTG.events=[click,FakeTG.Event('destroy',{'finishing':True})]
         app=TestApp()
         from unittest.mock import patch
-        with patch('tgk.widgets.TermuxBackend',lambda:TermuxBackend(tg=FakeTG)):
+        with patch('tgk.widgets.TermuxBackend',lambda **kwargs:TermuxBackend(tg=FakeTG,**kwargs)):
             app.run()
         self.assertTrue(app.clicked)
         self.assertEqual(app.root.ids.status.text,'Done')
