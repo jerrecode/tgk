@@ -64,9 +64,9 @@ def _validate(config):
         raise ValueError("unknown window mode")
     if checked["window"]["orientation"] not in ("system","portrait","landscape"):
         raise ValueError("unknown orientation")
-    LayoutScale(**checked["layout"])
     if checked["layout"]["columns"]!=12:
         raise ValueError("current ResponsiveGrid backend requires exactly 12 columns")
+    LayoutScale(**checked["layout"])
     Limits(**checked["io"])
     budget=checked["backend"]["clock_callbacks_per_tick"]
     if type(budget) is not int or not 1<=budget<=4096:
