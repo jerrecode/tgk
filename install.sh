@@ -49,5 +49,8 @@ if [ "$ENABLE_AUTO" -eq 1 ]; then "$PYTHON" -m tgk.install_hook; fi
 # Validation is read-only and refuses linked, special or malformed files.
 "$PYTHON" -m tgk.config validate >/dev/null
 "$PYTHON" -m tgk.config audit >/dev/null
+# SVG-only by default; creates the icon catalog atomically and preserves any
+# pre-existing user assets. Raster output is optional in config.icons.raster.
+"$PYTHON" -m tgk.install_assets
 "$PYTHON" -c 'import tgk; from tgk.canvas import _lib; _lib(); print("Installed TGK:", tgk.__version__, "from", tgk.__file__)'
 printf '%s\n' 'Ready. Check the Termux:GUI service with: tgk doctor --connect (requires tgk-tools).'
