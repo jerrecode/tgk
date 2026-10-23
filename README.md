@@ -424,6 +424,34 @@ all theme roles, HTML escaping and borders, and geometry changes on config
 events. Screen rotation, Android font-scale accessibility, rendering, status
 bar behavior and actual touch dimensions **must** still be tested on device.
 
+## Compact mobile actions and live Activity backgrounds
+
+Use `tgk.layout_helpers.compact_action_bar("Close",callback,margin=12)`
+as the last child of a vertical root to obtain a **48 dp-tall, text-sized
+button anchored to the bottom-right safe content edge** with a weighted
+spacer and configurable margins. The button uses an explicit width rather
+than filling an entire row or an unrestricted fraction of the screen.
+`action_width(text)` bounds other demo buttons by their label length.
+
+```python
+from tgk import App,BoxLayout,ScrollView
+from tgk.layout_helpers import compact_action_bar
+class Example(App):
+    def build(self):
+        root=BoxLayout(orientation="vertical")
+        content=ScrollView(weight=1)
+        root.add_widget(content)
+        root.add_widget(compact_action_bar("Close",self.stop))
+        return root
+```
+
+TGK's Activity root now fills the Android content viewport when its dimensions
+are unspecified. `App.set_theme(...)` refreshes both the native child View
+palette **and the Activity window background theme**, avoiding the previous
+stale startup-colored region behind translucent or margin-offset children.
+Whether Android applies every Activity theme field immediately depends on the
+installed Termux:GUI plugin version; hardware validation is still required.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
