@@ -155,6 +155,98 @@ def load_config(path=None):
     return validate_config(profile)
 
 
+def _validated_config_patch(changes):
+    """Validate a partial, nested settings patch and chosen preset names."""
+    if not isinstance(changes,dict) or not changes:
+        raise ValueError("config changes must be a nonempty object")
+    base=deepcopy(DEFAULT_CONFIG)
+    _merge(base,changes)
+    # Schema, numeric bounds, and option-profile validity are checked before
+    # writing; keep the existing compatibility behavior for old config files.
+    validated=validate_config(base)
+    name=validated["ui"]["option_profile"]
+    option_config(name)
+    theme=validated["ui"]["theme"]
+    from .theme import PRESETS,load_theme
+    if theme not in PRESETS:
+        candidate=config_home()/"palettes"/(_safe_name(theme)+".json")
+        if not candidate.is_file():
+            raise ValueError("unknown palette preset: "+theme)
+        load_theme(candidate)
+    typography=validated["ui"]["text_style"]
+    from .typography import PRESETS as TEXT_PRESETS,resolve_text_style
+    if typography not in TEXT_PRESETS:
+        candidate=config_home()/"text_styles"/(_safe_name(typography)+".json")
+        if not candidate.is_file():
+            raise ValueError("unknown text-style preset: "+typography)
+        entry=_read_json(candidate)
+        if set(entry)-{"style","properties"} or not isinstance(entry.get("properties"),dict):
+            raise ValueError("invalid text-style preset")
+        resolve_text_style(entry.get("style",typography),**entry["properties"])
+    return validated
+
+
+def patch_config(changes):
+    """Atomically persist a validated settings patch, leaving presets untouched.
+
+    No file is created implicitly; users must install or call config init
+    first. The original JSON is preserved byte-for-byte on validation failure.
+    """
+    if not isinstance(changes,dict) or not changes:
+        raise ValueError("config patch must be a nonempty mapping")
+    _validated_config_patch(changes)
+    root=config_home()
+    path=config_path()
+    if root.is_symlink() or path.is_symlink():
+        raise ValueError("refuse to modify symlink TGK configuration")
+    if not root.is_dir() or not path.is_file():
+        raise FileNotFoundError("initialize configuration first: tgk config init")
+    raw=_read_json(path)
+    validate_config(raw)
+    updated=deepcopy(raw)
+    _merge(updated,changes)
+    _validated_config_patch(updated)
+    encoded=(json.dumps(updated,indent=2,sort_keys=True,ensure_ascii=False)+"\\n").encode("utf-8")
+    if len(encoded)>MAX_JSON_BYTES:
+        raise ValueError("TGK configuration exceeds size limit")
+    import tempfile
+    fd,temporary=tempfile.mkstemp(prefix=".tgk-config-",suffix=".json",dir=root)
+    try:
+        with os.fdopen(fd,"wb") as out:
+            os.fchmod(out.fileno(),0o600)
+            out.write(encoded)
+            out.flush()
+            os.fsync(out.fileno())
+        if path.is_symlink():raise ValueError("refuse symlink TGK config target")
+        os.replace(temporary,path)
+        try:
+            directory_fd=os.open(root,os.O_RDONLY)
+            try:os.fsync(directory_fd)
+            finally:os.close(directory_fd)
+        except OSError:
+            pass  # Android filesystem may reject directory fsync
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    clear_config_cache()
+    return load_config()
+
+
+def update_config(section,key,value):
+    """Update one permitted setting without discarding unrelated user edits."""
+    _safe_name(section)
+    _safe_name(key)
+    if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
+        raise ValueError("unknown configuration section: "+section)
+    if key not in DEFAULT_CONFIG[section]:
+        raise ValueError("unknown configuration field: "+section+"."+key)
+    return patch_config({section:{key:value}})
+
+
+def clear_config_cache():
+    """Discard cached configuration after external edits or profile changes."""
+    _load_cached.cache_clear()
+
+
 def option_config(name):
     """Apply a named shipped option profile to defaults, without a write."""
     _safe_name(name)
