@@ -2,7 +2,21 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.6.9:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.6.10:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+
+The [branch audit](docs/branch-audit-20261023.md) documents every retained
+feature/fix head and which changes were already integrated, superseded or
+recovered against current main. This version validates effective option-profile
+and pinned settings, palette JSON and typography before publishing a config
+transaction. Rejected updates preserve the previous configuration bytes.
+Preset audits cap collection before sorting. Canvas calls after `close()` raise
+`RuntimeError`; drawing and close share a lock so an in-flight native call keeps
+its writable buffer alive. Native bindings are cached once per interpreter.
+
+Recovered geometry APIs include `ScreenMetrics.safe_content_size_dp`,
+`is_landscape`, `LayoutScale.available_width(metrics)` and
+`column_width(metrics, gutter_dp=None, columns=None)`. Only explicitly supplied
+additional insets are subtracted; ordinary Android decor is not guessed.
 
 ## Install on Android/Termux
 

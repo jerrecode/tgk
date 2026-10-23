@@ -87,11 +87,10 @@ def resolve_size(spec, metrics, *, touch_target_dp=48, interactive=False,
     _unit(touch_target_dp,"touch_target_dp")
     _unit(intrinsic_width_dp,"intrinsic_width_dp")
     _unit(intrinsic_height_dp,"intrinsic_height_dp")
-    width_available=max(1.0,metrics.width_dp-max(0,spec.margin_horizontal_dp))
+    content_width,content_height=metrics.safe_content_size_dp
+    width_available=max(1.0,content_width-max(0,spec.margin_horizontal_dp))
     # Android reports content-window dp, NOT raw physical screen size.
-    height_available=max(1.0,metrics.height_dp-
-        (metrics.inset_top_dp or 0)-(metrics.inset_bottom_dp or 0)-
-        max(0,spec.margin_vertical_dp))
+    height_available=max(1.0,content_height-max(0,spec.margin_vertical_dp))
     w=(spec.width_dp if spec.width_dp is not None else
        width_available*spec.width_fraction if spec.width_fraction is not None else intrinsic_width_dp)
     h=(spec.height_dp if spec.height_dp is not None else

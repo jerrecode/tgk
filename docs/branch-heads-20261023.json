@@ -1,0 +1,177 @@
+{
+  "baseline_main": "81e9c2e5f43e157637dd9f0d9fa7eba8faff3a53",
+  "branches": [
+    {
+      "name": "chore/version-0610-android-fixes-20261023",
+      "sha": "a9501ef568c3890163245a2e57b76717fd8f4708"
+    },
+    {
+      "name": "feat/config-explicit-pins-batch-20261023",
+      "sha": "6b07715be6e28a02cfdfc44de07120b2378b4e46"
+    },
+    {
+      "name": "feat/config-multipatch-raster-default-20261023",
+      "sha": "f35a292df4839d30180f4f68b360556c68cb2e98"
+    },
+    {
+      "name": "feat/fluid-window-scaling-breakpoint-grid-20261023",
+      "sha": "a3071b3ac252d20678ec1d403575cecb69c5e220"
+    },
+    {
+      "name": "feat/persistent-config-presets-20261023",
+      "sha": "4f52e0c1de92fe452aad0f75510aa1d6a26b6144"
+    },
+    {
+      "name": "feat/pinned-config-overrides-20261023",
+      "sha": "83823973a2e2321c3de40d7c356d4b7ad07a304f"
+    },
+    {
+      "name": "feature/adaptive-layout-style-tokens-20261023",
+      "sha": "ba34fdd9c6346a0b4bb4895d393e17e2d5cfa217"
+    },
+    {
+      "name": "feature/composable-icon-assets-20261023",
+      "sha": "3848020e10318c702060d13dcf421d5955cc3add"
+    },
+    {
+      "name": "feature/config-profile-atomic-update-20261023",
+      "sha": "bc8f05ee9bf0e34b11e3a295639ada11114a071a"
+    },
+    {
+      "name": "feature/install-generated-icon-catalog-20261023",
+      "sha": "008b3956f0dea630de1f782eec690b8e70973aa4"
+    },
+    {
+      "name": "feature/navigation-windows-typography-icons-20261023",
+      "sha": "e2f1225b9c652c2935628d80bf7386c5d5354a6f"
+    },
+    {
+      "name": "feature/persistent-config-presets-20261023",
+      "sha": "59eb7985f034acf1853b39bf63cc692e81ae705b"
+    },
+    {
+      "name": "feature/persistent-runtime-presets-config-20261023",
+      "sha": "a042147d0aee89d5583583e9971ce9abcf2c48c0"
+    },
+    {
+      "name": "feature/semantic-themes-and-ui-labs-20261023",
+      "sha": "5b42ef38401c0ae6cad5e59c48cd44136a7cab68"
+    },
+    {
+      "name": "feature/viewport-size-spec-current-main-20261023",
+      "sha": "d23df309c8da0ad65b2db3c2ca00cd9fea1bcd90"
+    },
+    {
+      "name": "fix/accessibility-breakpoints-current-main-20261023",
+      "sha": "764d8dd368c3dfc1f5b38014304144da3e58e65a"
+    },
+    {
+      "name": "fix/android-input-frame-fill-and-overlay-20261023",
+      "sha": "f283b2296a317fce1c27ed9edc77489b228a9ea4"
+    },
+    {
+      "name": "fix/clock-budget-iterative-native-tree-20261023",
+      "sha": "e95692efdecb4d874009b946a9d12e4d5b1cb5a9"
+    },
+    {
+      "name": "fix/compact-footer-live-window-background-20261023",
+      "sha": "18d47e9f789de752019b3ff93998a91cf6cde00f"
+    },
+    {
+      "name": "fix/config-atomic-settings-20261023",
+      "sha": "519ee175d2de04219b30e64361a51eee3caacff1"
+    },
+    {
+      "name": "fix/config-atomic-updates-unified-defaults-20261023",
+      "sha": "7c9e2423f8cd988f84c54c8f9610180d72439d01"
+    },
+    {
+      "name": "fix/config-cache-atomic-replacement-20261023",
+      "sha": "13fca055152b773ecffb73c0190fabf0475085d6"
+    },
+    {
+      "name": "fix/config-concurrent-lock-20261023",
+      "sha": "e243a3d38a2a276b9884e6265f83ec3342f194b4"
+    },
+    {
+      "name": "fix/config-explicit-pins-batched-edits-v063-20261023",
+      "sha": "ab827f73f2156341f65ef5b602180238d248d949"
+    },
+    {
+      "name": "fix/config-no-follow-preset-reads-20261023",
+      "sha": "440d683cdc952e0684497dc3549ee7ff0eeca3aa"
+    },
+    {
+      "name": "fix/config-pinned-precedence-only-v064-20261023",
+      "sha": "9df7bdba9267764b40b4ebea3800c64811c919d7"
+    },
+    {
+      "name": "fix/config-presets-safety-and-default-text-20261023",
+      "sha": "adc29a4d72c08839b82274058f2bdc78f735b2fc"
+    },
+    {
+      "name": "fix/config-profile-precedence-20261023",
+      "sha": "bed7d6dc1bcb415c1bf4349d9d6660e79a16c2fb"
+    },
+    {
+      "name": "fix/configurable-responsive-columns-20261023",
+      "sha": "0610653625b10794eaf4313e14b5e09cc4226970"
+    },
+    {
+      "name": "fix/demo-interactive-slider-20261023",
+      "sha": "d3db5bf5a8d7f82f471e0bb532c07e624f51cf8b"
+    },
+    {
+      "name": "fix/install-audit-after-secure-reads-20261023",
+      "sha": "7ef7fc88003c2ff62ec36603a0e1cd464cbb694e"
+    },
+    {
+      "name": "fix/install-full-preset-validation-v068-20261023",
+      "sha": "d6dde85d86bc25df048887d30a9c8b9daca0f045"
+    },
+    {
+      "name": "fix/native-wheel-packaging",
+      "sha": "b455c629cbabcf88bf40148312b10b3ce4533905"
+    },
+    {
+      "name": "fix/persistent-config-settings-atomic-20261023-v2",
+      "sha": "556116bacb62b620f16b5c8e071625e43dd4d667"
+    },
+    {
+      "name": "fix/pinned-settings-on-current-main-20261023",
+      "sha": "aee334a34673e55226c92ecb57617c3a55ac9234"
+    },
+    {
+      "name": "fix/reactive-theme-redraw-and-bounded-pipelines-20261023",
+      "sha": "f5fdd474d422c1580714057899e0a8bd215e845f"
+    },
+    {
+      "name": "fix/responsive-sizing-and-grid-consistency-20261023",
+      "sha": "06ec8563ddb0d0b9afb35aa3723fc1de72442887"
+    },
+    {
+      "name": "fix/sizing-layout-managed-and-update-docs-20261023",
+      "sha": "6a2808d88df983bdd2a670169b73c99087442b45"
+    },
+    {
+      "name": "fix/slider-imageview-touch-coordinate-space",
+      "sha": "bee2fd840f34ad7ea0204f7a0080b40a0895de4e"
+    },
+    {
+      "name": "fix/slider-pointer-ownership",
+      "sha": "9c5483c7dd3a254778703db02ceff0b8bb0e5d24"
+    },
+    {
+      "name": "fix/validate-all-presets-bounded-json-20261023",
+      "sha": "4dac8ab0a5d020b5b4933daf7026f23d814c9eac"
+    },
+    {
+      "name": "fix/verified-icon-raster-20261023",
+      "sha": "d25a3d900bdf737ebb6ddb797979575ac0835c17"
+    },
+    {
+      "name": "perf/native-event-index-20261023",
+      "sha": "c29adc65b30f30054668af681489e073b4a10a67"
+    }
+  ]
+}

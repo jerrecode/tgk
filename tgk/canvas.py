@@ -1,12 +1,15 @@
 """ctypes wrapping the C rasterizer. No numpy required, supports TG shared mmap."""
 from __future__ import annotations
 import ctypes as ct
+from functools import lru_cache
 from pathlib import Path
+from threading import RLock
 
 class _Surface(ct.Structure):
     _fields_ = [('pixels', ct.POINTER(ct.c_uint8)), ('width', ct.c_int),
                 ('height', ct.c_int), ('stride', ct.c_int)]
 
+@lru_cache(maxsize=1)
 def _lib():
     path = Path(__file__).with_name('libtgk.so')
     if not path.exists():
@@ -34,6 +37,7 @@ def rgba(r,g,b,a=255):
 
 class Canvas:
     def __init__(self, buffer, width, height, stride=None):
+        self._lock = RLock()
         self.width, self.height = int(width), int(height)
         self.stride = int(stride if stride is not None else 4*width)
         if self.width<=0 or self.height<=0 or self.stride<4*self.width:
@@ -44,15 +48,36 @@ class Canvas:
         if self._c.tgk_surface_init(ct.byref(self._s), self._source,
                                      self.width, self.height, self.stride):
             raise ValueError('cannot initialize surface')
-    def clear(self,color): self._c.tgk_clear(ct.byref(self._s),color)
-    def rect(self,x,y,w,h,color): self._c.tgk_rect(ct.byref(self._s),int(x),int(y),int(w),int(h),color)
-    def circle(self,x,y,r,color): self._c.tgk_circle(ct.byref(self._s),int(x),int(y),int(r),color)
-    def line(self,x,y,x1,y1,color): self._c.tgk_line(ct.byref(self._s),int(x),int(y),int(x1),int(y1),color)
-    def gradient(self,top,bottom): self._c.tgk_gradient(ct.byref(self._s),top,bottom)
+    def _require_open(self):
+        if self._source is None:raise RuntimeError('canvas is closed')
+    def clear(self,color):
+        with self._lock:
+            self._require_open()
+            self._c.tgk_clear(ct.byref(self._s),color)
+    def rect(self,x,y,w,h,color):
+        with self._lock:
+            self._require_open()
+            self._c.tgk_rect(ct.byref(self._s),int(x),int(y),int(w),int(h),color)
+    def circle(self,x,y,r,color):
+        with self._lock:
+            self._require_open()
+            self._c.tgk_circle(ct.byref(self._s),int(x),int(y),int(r),color)
+    def line(self,x,y,x1,y1,color):
+        with self._lock:
+            self._require_open()
+            self._c.tgk_line(ct.byref(self._s),int(x),int(y),int(x1),int(y1),color)
+    def gradient(self,top,bottom):
+        with self._lock:
+            self._require_open()
+            self._c.tgk_gradient(ct.byref(self._s),top,bottom)
     def map_touch(self,x,y,view_w,view_h,fit=False):
-        px,py=ct.c_int(),ct.c_int()
-        rc=self._c.tgk_map_touch(int(view_w),int(view_h),self.width,self.height,int(fit),
-                                  float(x),float(y),ct.byref(px),ct.byref(py))
-        return None if rc else (px.value,py.value)
+        with self._lock:
+            self._require_open()
+            px,py=ct.c_int(),ct.c_int()
+            rc=self._c.tgk_map_touch(int(view_w),int(view_h),self.width,self.height,int(fit),
+                                      float(x),float(y),ct.byref(px),ct.byref(py))
+            return None if rc else (px.value,py.value)
     def close(self):
-        self._source=None  # relinquish exported buffer before mmap.close
+        with self._lock:
+            self._s.pixels=None
+            self._source=None  # relinquish exported buffer before mmap.close
