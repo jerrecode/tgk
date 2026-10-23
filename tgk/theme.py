@@ -13,12 +13,76 @@ from collections.abc import Mapping
 import json
 import re
 
-ROLES = (
+BASE_ROLES = (
     "status_bar", "primary", "background", "surface", "surface_alt",
     "text", "muted", "accent", "accent_secondary", "button", "button_text",
     "outline", "track", "thumb", "success", "warning", "danger",
 )
+DERIVED_ROLES = (
+    "button_active","button_pressed","button_inactive","button_border",
+    "list_background","list_row_alt","list_selected","list_unselected",
+    "table_background","table_header","table_row_alt","table_column_alt",
+    "table_first_row","table_first_column","table_text","table_divider",
+    "input_background","input_outline","input_focused","input_text",
+    "tab_active","tab_inactive","tab_text",
+    "progress_track","progress_fill","progress_text",
+    "slider_track","slider_fill","slider_thumb",
+    "dropdown_background","dropdown_border",
+    "top_bar","bottom_bar","left_bar","right_bar",
+    "panel","menu","notification","overlay",
+    "divider","link","text_selected","text_unselected",
+    "selection","highlight","shadow","border","scrollbar","tooltip",
+    "modal","control_disabled",
+)
+ROLES=BASE_ROLES+DERIVED_ROLES
 DEFAULT_NAME = "midnight"
+
+def blend_color(first,second,amount):
+    """Deterministic sRGB channel interpolation, conserving alpha."""
+    if isinstance(amount,bool) or not isinstance(amount,(int,float)) or not 0<=amount<=1:
+        raise ValueError("blend amount must be within [0,1]")
+    def channels(value):
+        raw=value.lstrip("#")
+        if len(raw)==6:raw+="FF"
+        if len(raw)!=8:raise ValueError("blend requires #RRGGBB or #RRGGBBAA")
+        return tuple(int(raw[i:i+2],16) for i in (0,2,4,6))
+    aa,bb=channels(first),channels(second)
+    return "#"+''.join(f"{round(x*(1-amount)+y*amount):02X}" for x,y in zip(aa,bb))
+
+def _derived(colors):
+    b,s,a,txt=colors["button"],colors["surface"],colors["accent"],colors["text"]
+    bg=colors["background"]
+    return dict(
+        button_active=blend_color(b,"#FFFFFF",.18),
+        button_pressed=blend_color(b,"#000000",.26),
+        button_inactive=blend_color(b,bg,.52),
+        button_border=colors["outline"],
+        list_background=s,list_row_alt=blend_color(s,bg,.16),
+        list_selected=blend_color(s,a,.27),list_unselected=s,
+        table_background=s,table_header=blend_color(s,a,.23),
+        table_row_alt=blend_color(s,bg,.14),
+        table_column_alt=blend_color(s,bg,.12),
+        table_first_row=blend_color(s,a,.23),
+        table_first_column=blend_color(s,a,.13),
+        table_text=txt,table_divider=colors["outline"],
+        input_background=colors["surface_alt"],
+        input_outline=colors["outline"],input_focused=a,input_text=txt,
+        tab_active=blend_color(s,a,.27),tab_inactive=blend_color(s,bg,.20),
+        tab_text=txt,
+        progress_track=colors["track"],progress_fill=a,progress_text=txt,
+        slider_track=colors["track"],slider_fill=a,slider_thumb=colors["thumb"],
+        dropdown_background=s,dropdown_border=colors["outline"],
+        top_bar=bg,bottom_bar=bg,left_bar=s,right_bar=s,
+        panel=s,menu=s,notification=blend_color(s,a,.12),
+        overlay=blend_color(bg,"#000000",.40),
+        divider=colors["outline"],link=a,
+        text_selected=colors["button_text"],text_unselected=colors["muted"],
+        selection=blend_color(s,a,.35),highlight=blend_color(bg,a,.18),
+        shadow=blend_color(bg,"#000000",.50),
+        border=colors["outline"],scrollbar=colors["muted"],
+        tooltip=colors["surface_alt"],modal=s,
+        control_disabled=blend_color(txt,bg,.50),
+    )
 
 def _palette(background, surface, text, accent, **overrides):
     values = dict(status_bar=background, primary=accent, background=background,
@@ -27,6 +91,7 @@ def _palette(background, surface, text, accent, **overrides):
                   button_text=text, outline=accent, track=surface,
                   thumb=text, success="#39C99B", warning="#F4BD56", danger="#F17183")
     values.update(overrides)
+    values.update({k:v for k,v in _derived(values).items() if k not in overrides})
     return values
 
 _PRESET_INPUT = {
@@ -94,7 +159,13 @@ class Theme:
         return self.colors[role]
 
     def override(self,**colors):
-        return Theme(self.name,dict(self.colors,**_validate_overrides(colors)))
+        overrides=_validate_overrides(colors)
+        result=dict(self.colors)
+        result.update(overrides)
+        if set(overrides)&set(BASE_ROLES):
+            derived=_derived(result)
+            result.update({k:v for k,v in derived.items() if k not in overrides})
+        return Theme(self.name,result)
 
     def to_dict(self):
         return {"name":self.name,"colors":dict(self.colors)}
