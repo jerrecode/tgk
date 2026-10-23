@@ -1,7 +1,7 @@
 """TGK public API; lazy imports keep the global site hook inexpensive."""
-__version__ = '0.3.0'
+__version__ = '0.4.0'
 _EXPORTS={
-    'App','Widget','BoxLayout','GridLayout','FloatLayout','ScrollView',
+    'App','Widget','BoxLayout','GridLayout','ResponsiveGrid','FloatLayout','ScrollView',
     'Label','Button','TextInput','CheckBox','Switch','ProgressBar','Clock',
     'Image','Spinner','ToggleButton','Slider','EventDispatcher','StringProperty',
     'NumericProperty','BooleanProperty','ObjectProperty','ListProperty',
@@ -21,7 +21,7 @@ def __getattr__(name):
         globals()[name]=result
         return result
     if name in ('Screen','ScreenManager','TabbedPanel','Tab','PageView',
-                'Popup','RichTextLabel','IconLabel','InfiniteCanvas'):
+                'Popup','RichTextLabel','RichTable','IconLabel','InfiniteCanvas'):
         from importlib import import_module
         result=getattr(import_module('.advanced',__name__),name)
         globals()[name]=result
@@ -43,6 +43,17 @@ def __getattr__(name):
                 'hash_file','download','ffprobe'):
         from importlib import import_module
         result=getattr(import_module('.io_pipeline',__name__),name)
+        globals()[name]=result
+        return result
+    if name in ('ScreenMetrics','LayoutScale','arrange_spans','measure_activity'):
+        from importlib import import_module
+        result=getattr(import_module('.adaptive',__name__),name)
+        globals()[name]=result
+        return result
+    if name in ('ComponentStyle','TableStyle','DEFAULT_STYLES',
+                'resolve_component_style','table_html'):
+        from importlib import import_module
+        result=getattr(import_module('.style_tokens',__name__),name)
         globals()[name]=result
         return result
     if name=='Builder':

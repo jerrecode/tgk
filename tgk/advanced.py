@@ -110,6 +110,33 @@ class RichTextLabel(Widget):
         if name in ("text","spans","style") and self._native is not None:
             self._native.setdata(self.html())
 
+class RichTable(RichTextLabel):
+    """HTML table with per-cell alternating shading and configurable borders.
+
+    WebView-backed because native Termux:GUI has no table styling API.
+    """
+    def __init__(self,rows=None,table_style=None,**kwargs):
+        object.__setattr__(self,"_table_rows",tuple(tuple(x) for x in (rows or ())))
+        from .style_tokens import TableStyle
+        if table_style is not None and not isinstance(table_style,TableStyle):
+            raise TypeError("table_style must be TableStyle")
+        object.__setattr__(self,"_table_style",table_style)
+        super().__init__(text="",**kwargs)
+
+    def html(self):
+        from .style_tokens import table_html
+        return table_html(self._table_rows,theme=self._effective_theme,style=self._table_style)
+
+    def update_rows(self,rows):
+        new=tuple(tuple(row) for row in rows)
+        from .style_tokens import table_html
+        # Validate before replacing live model.
+        table_html(new,theme=self._effective_theme,style=self._table_style)
+        self._table_rows=new
+        if self._native is not None:
+            self._native.setdata(self.html())
+
+
 class IconLabel(Label):
     def __init__(self,icon="file",text="",**kwargs):
         spec=Icon(icon,size=int(kwargs.get("font_size",20)),

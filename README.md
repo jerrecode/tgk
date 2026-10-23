@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.3.0:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.4.0:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
 
 ## Install on Android/Termux
 
@@ -336,6 +336,93 @@ implement FTP, SSH, Telnet, SOCKS, SFTP, SMTP, Gopher, UDP, live media decoding,
 hardware video rendering or automatic multiprocessing. They are building
 blocks to integrate such opt-in plugins safely. Android throughput and
 power consumption remain unmeasured.
+
+## Adaptive Android dp grid and expanded semantic UI styles
+
+TGK's optional `ResponsiveGrid` implements a **12-column width-class grid**,
+with breakpoints compact (<600 dp), medium (600–839 dp) and expanded (840+ dp).
+Each widget can specify `span_compact`, `span_medium` and
+`span_expanded` (integer 1–12). The native Android `GridLayout` retains
+12 columns and positions child views using `setgridlayoutparams`, so a
+Termux:GUI `config` event (rotation/window resize) reflows existing views
+without reconstructing them. Native pointer targets default to at least
+**48 dp**; a widget can opt out with `allow_small_touch_target=True`.
+
+```python
+from tgk import App, ResponsiveGrid, Button
+grid=ResponsiveGrid()
+for i in range(12):
+    grid.add_widget(Button(text=str(i),span_compact=12,
+                           span_medium=6,span_expanded=4))
+# App(orientation_mode="system") respects system rotation;
+# use "portrait" or "landscape" to lock just this Activity.
+```
+
+`ScreenMetrics.from_configuration` reads actual Termux:GUI
+`Activity.getconfiguration()` keys `screenwidth`, `screenheight`,
+`orientation`, `density` and `fontscale`; the dimensions are Android
+**window dp**, not necessarily the physical display's maximum resolution.
+Its `approx_window_px` is computed using density, and
+`max_refresh_hz`, physical panel resolution, color depth and explicit
+status/navigation-bar inset fields remain **None unless an authoritative
+provider supplies them**. Standard Android Activities already lay out inside
+the safe content area; TGK does **not** apply a guessed extra status-bar
+offset (which would double-offset some devices).
+
+The defaults use a 4 dp spacing grid, a 48 dp interactive touch minimum,
+gutter/margin scale and a capped content width.
+`tgk.adaptive.arrange_spans` is a pure, testable first-fit row-packing
+algorithm; `LayoutScale` exposes spacing, grid columns and touch units.
+
+### Component colors, state roles and styled tables
+
+Each of the twelve palette presets now defines over sixty semantic roles.
+New derived roles include `button_pressed`, `button_active`,
+`button_inactive`, `button_border`, `input_background`,
+`dropdown_background`, `list_row_alt`, `list_selected`,
+`table_header`, `table_row_alt`, `table_column_alt`,
+`table_first_row`, `table_first_column`, `table_divider`,
+`tab_active`, `tab_inactive`, `slider_fill`, `slider_thumb`,
+`progress_track`, `progress_fill`, `panel`, `menu`,
+`notification`, `top_bar`, `bottom_bar`, `selection`, and
+`text_selected`. These are derived by interpolating base scheme colors
+and are individually overridable. Updating a base color recomputes derived
+roles not explicitly replaced in that operation.
+
+For a button use `visual_state="normal"|"pressed"|"active"|"disabled"`
+(the latter are visual variants, **not** automatic input gating).
+`ComponentStyle` and `TableStyle` are immutable style contracts for
+padding, margins, border widths/styles, corner radii, text-fit metadata,
+alternating row/column shading, first row/column emphasis and cell headers.
+Android native Views do not expose all these decoration setters.
+`RichTable` implements the full table styling in a local, escaped,
+CSP-restricted, JavaScript-free WebView instead:
+
+```python
+from tgk import RichTable, TableStyle
+table=RichTable(rows=[["Metric","Value"],["Width","393 dp"]],
+                table_style=TableStyle(
+                  shade_alternate_rows=True,
+                  shade_alternate_columns=True,
+                  first_column_right_width_dp=3,
+                  header_bottom_width_dp=4,
+                  bold_first_row=True))
+```
+
+Typography presets now include heading levels H1–H5, descriptions, hyperlinks,
+filesystem paths, code, comments, citations/references, footnotes, metadata,
+tables, input fields, selected text and notification text. They inherit
+palette color roles and can still be overridden on individual widgets.
+
+```sh
+python examples/adaptive_layout.py --theme ocean --orientation system
+python examples/adaptive_layout.py --theme paper --orientation landscape
+```
+
+Offline tests verify window metric parsing, missing hardware information,
+all theme roles, HTML escaping and borders, and geometry changes on config
+events. Screen rotation, Android font-scale accessibility, rendering, status
+bar behavior and actual touch dimensions **must** still be tested on device.
 
 ## Shell tools
 

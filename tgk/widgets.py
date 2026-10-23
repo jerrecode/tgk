@@ -126,7 +126,8 @@ class Widget(EventDispatcher):
                 self._slider_draw()
         if name in ('theme','colors','background_color','text_color',
                     'text_style','text_size','font_weight','font_family','italic',
-                    'underline','strike','text_align','line_height','font_color_role'):
+                    'underline','strike','text_align','line_height','font_color_role',
+                    'visual_state','selected','disabled'):
             if self._theme_hook is not None:self._theme_hook(name)
         if name=='visible' and n is not None and hasattr(n,'setvisibility'):
             n.setvisibility(2 if value else 0)
@@ -151,6 +152,15 @@ class GridLayout(Widget):
     def __init__(self,cols=1,rows=0,**kwargs):
         if not cols and not rows: raise ValueError('cols or rows required')
         super().__init__(cols=cols,rows=rows,**kwargs)
+class ResponsiveGrid(GridLayout):
+    """12-column adaptive GridLayout; spans may vary by compact/medium/expanded width.
+
+    Android updates positions in-place using setgridlayoutparams on config events.
+    It does not reconstruct native Views or change a GridLayout's column count.
+    """
+    def __init__(self,**kwargs):
+        super().__init__(cols=12,rows=kwargs.pop('rows',0),**kwargs)
+
 class FloatLayout(Widget): pass # native FrameLayout, limited Kivy positioning
 class ScrollView(Widget): pass
 class Label(Widget):
@@ -243,7 +253,8 @@ class _ClockHandle:
 Clock=_Clock()
 
 class TermuxBackend:
-    def __init__(self, tg=None, theme=None, text_style=None, window_mode='normal'):
+    def __init__(self, tg=None, theme=None, text_style=None,
+                 window_mode='normal',layout_scale=None):
         if tg is None:
             try: import termuxgui as tg
             except ImportError as exc:
@@ -257,6 +268,12 @@ class TermuxBackend:
         self._slider_resources=[]
         self._canvas_resources=[]
         self._stop_requested=False
+        from .adaptive import LayoutScale
+        self.screen_metrics=None
+        self.layout_scale=layout_scale or LayoutScale()
+        if not isinstance(self.layout_scale,LayoutScale):
+            raise TypeError('layout_scale must be a LayoutScale')
+        self.orientation_mode='system'
         if window_mode not in ('normal','dialog','overlay'):
             raise ValueError("window_mode must be normal, dialog or overlay")
         self.window_mode=window_mode
@@ -308,7 +325,15 @@ class TermuxBackend:
         if background is None:
             if node.parent is None:background=selected['background']
             elif isinstance(node,(BoxLayout,GridLayout,FloatLayout,ScrollView)):background=selected['surface']
-            elif isinstance(node,(Button,TextInput)):background=selected['button' if isinstance(node,Button) else 'surface_alt']
+            elif isinstance(node,Button):
+                state=getattr(node,'visual_state','normal')
+                if state not in ('normal','pressed','active','disabled'):
+                    raise ValueError('button visual_state must be normal/pressed/active/disabled')
+                role={'normal':'button','pressed':'button_pressed',
+                      'active':'button_active','disabled':'button_inactive'}[state]
+                background=selected[role]
+            elif isinstance(node,TextInput):background=selected['input_background']
+            elif isinstance(node,Spinner):background=selected['dropdown_background']
         if background is not None:
             self._cached_set(node,'background','setbackgroundcolor',tgui_color(background))
         from .advanced import InfiniteCanvas,RichTextLabel
@@ -369,6 +394,30 @@ class TermuxBackend:
         if theme is not None:self.theme=resolve_theme(theme)
         for node in tuple(self.nodes):self._paint_node(node)
 
+    def refresh_screen_metrics(self):
+        """Refresh only known Android window metrics; never guess panel details."""
+        from .adaptive import measure_activity
+        measured=measure_activity(self.activity)
+        if measured is None:return None
+        if self.screen_metrics==measured:return measured
+        self.screen_metrics=measured
+        for node in tuple(self.nodes):
+            if isinstance(node,ResponsiveGrid):
+                self._reflow_grid(node)
+        return measured
+
+    def _reflow_grid(self,node):
+        from .adaptive import arrange_spans,ScreenMetrics
+        metrics=self.screen_metrics or ScreenMetrics(393,852)
+        positions=arrange_spans(node.children,columns=12,metrics=metrics)
+        for child,(row,col,rows,cols) in zip(node.children,positions):
+            native=child._native
+            if native is not None:
+                signature=(row,col,rows,cols)
+                if child._applied_native_style.get('grid_position')!=signature:
+                    native.setgridlayoutparams(row,col,rows,cols,'fill','fill')
+                    child._applied_native_style['grid_position']=signature
+
     def _make(self,node,parent):
         from .advanced import ScreenManager,TabbedPanel,Popup,RichTextLabel,InfiniteCanvas
         tg=self.tg;a=self.activity
@@ -408,7 +457,8 @@ class TermuxBackend:
             native=tg.LinearLayout(a,parent,vertical=node.orientation=='vertical')
         elif isinstance(node,GridLayout):
             cols=int(node.cols or max(1,(len(node.children)+int(node.rows)-1)//int(node.rows)))
-            rows=int(node.rows or (len(node.children)+cols-1)//cols)
+            rows=len(node.children) if isinstance(node,ResponsiveGrid) else int(
+                node.rows or (len(node.children)+cols-1)//cols)
             native=tg.GridLayout(a,max(1,rows),max(1,cols),parent)
         elif isinstance(node,ScrollView):
             if len(node.children)>1:raise ValueError('ScrollView accepts exactly one child')
@@ -471,7 +521,20 @@ class TermuxBackend:
             gravity=getattr(native,'setgravity',None)
             if callable(gravity):gravity(horizontal[ha],vertical[va])
         if isinstance(node,ProgressBar):native.setprogress(max(0,min(100,round(100*node.value/node.max if node.max else 0))))
-        if hasattr(node,'height') and node.height is not None: native.setheight(int(node.height))
+        # Native dimensions are dp (Termux:GUI handles physical pixel density).
+        from .style_tokens import ComponentStyle,resolve_component_style
+        component=getattr(node,'component_style',None)
+        if isinstance(component,str):component=resolve_component_style(component)
+        if component is not None and not isinstance(component,ComponentStyle):
+            raise TypeError('component_style must be a named preset or ComponentStyle')
+        interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
+        requested=getattr(node,'height',None)
+        if interactive and not getattr(node,'allow_small_touch_target',False):
+            minimum=component.min_touch_dp if component is not None else self.layout_scale.touch_target_dp
+            if requested is None:
+                requested=max(72,minimum) if isinstance(node,Slider) else minimum
+            else:requested=max(float(requested),minimum)
+        if requested is not None:native.setheight(int(math.ceil(requested)))
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
         if isinstance(node.parent,BoxLayout):
             weight=getattr(node,'weight',None)
@@ -492,7 +555,7 @@ class TermuxBackend:
             spacing=getattr(node.parent,'spacing',0)
             if spacing and position:
                 native.setmargin(int(spacing),'top' if node.parent.orientation=='vertical' else 'left')
-        if isinstance(node.parent,GridLayout):
+        if isinstance(node.parent,GridLayout) and not isinstance(node.parent,ResponsiveGrid):
             index=node.parent.children.index(node)
             rows=int(getattr(node,'row_span',1));cols=int(getattr(node,'col_span',1))
             ar=getattr(node,'align_row','center');ac=getattr(node,'align_col','center')
@@ -503,10 +566,13 @@ class TermuxBackend:
                                        rows,cols,ar,ac)
         if isinstance(node,BoxLayout) and node.padding:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
+        if component is not None and component.margin_dp:
+            native.setmargin(int(component.margin_dp))
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
         self._paint_node(node)
         for child in node.children:self._make(child,tab_content if tab_content is not None else native)
+        if isinstance(node,ResponsiveGrid):self._reflow_grid(node)
         if isinstance(node,ScreenManager):
             node._sync()
             if isinstance(node,TabbedPanel) and node._tab_bar is not None and node.children:
@@ -598,6 +664,9 @@ class TermuxBackend:
 
     def event(self,e):
         from .advanced import TabbedPanel,InfiniteCanvas
+        if e.type=='config':
+            self.refresh_screen_metrics()
+            return
         if e.type=='back':self.stop();return
         if e.type=='destroy':return
         if e.type not in ('click','text','itemselected','touch'):return
@@ -649,6 +718,10 @@ class TermuxBackend:
             if self.window_mode=='overlay':options['overlay']=True
             self.activity=self.tg.Activity(c,**options)
             try:
+                if self.orientation_mode in ('portrait','landscape'):
+                    change=getattr(self.activity,'setorientation',None)
+                    if callable(change):change(self.orientation_mode)
+                self.refresh_screen_metrics()
                 from .theme import apply_activity_theme
                 apply_activity_theme(self.activity,self.theme)
                 self.render(root)
@@ -698,6 +771,13 @@ class App(EventDispatcher):
         selected=kwargs.pop('theme',None)
         typography=kwargs.pop('text_style',None)
         self.window_mode=kwargs.pop('window_mode','normal')
+        self.orientation_mode=kwargs.pop('orientation_mode','system')
+        from .adaptive import LayoutScale
+        self.layout_scale=kwargs.pop('layout_scale',None) or LayoutScale()
+        if not isinstance(self.layout_scale,LayoutScale):
+            raise TypeError('layout_scale must be a LayoutScale')
+        if self.orientation_mode not in ('system','portrait','landscape'):
+            raise ValueError('orientation_mode must be system, portrait or landscape')
         super().__init__(**kwargs);self.root=None;self._backend=None
         self.theme=resolve_theme(selected or get_theme())
         self.text_style=resolve_text_style(typography or get_text_style())
@@ -728,7 +808,9 @@ class App(EventDispatcher):
                 self.root=Builder.load_file(type(self).__name__.removesuffix('App').lower()+'.kv')
             if not isinstance(self.root,Widget):raise TypeError('App.build must return a Widget')
             self._backend=TermuxBackend(theme=self.theme,text_style=self.text_style,
-                                        window_mode=self.window_mode)
+                                        window_mode=self.window_mode,
+                                        layout_scale=self.layout_scale)
+            self._backend.orientation_mode=self.orientation_mode
             self._backend.run(self.root,self.on_start)
         finally:
             try:self.on_stop()
