@@ -6,13 +6,17 @@ The module performs NO filesystem writes on import or runtime reads.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from functools import lru_cache
+import fcntl
 import json
 import math
 import os
 from pathlib import Path
 import re
+import stat
+import time
 
 
 SCHEMA_VERSION=1
@@ -173,12 +177,47 @@ def clear_config_cache():
     _load_cached.cache_clear()
 
 
-def patch_config(changes, *, reset=()):
+@contextmanager
+def _config_write_lock(directory, timeout=5.0):
+    """Serialize read/merge/replace across independent Termux/Python processes.
+
+    Lock a stable sibling inode, NEVER config.json: atomic os.replace changes
+    config.json's inode. flock is released by the kernel when a process exits.
+    """
+    if type(timeout) not in (int,float) or not math.isfinite(timeout) or not 0<timeout<=60:
+        raise ValueError("config lock timeout must be finite in (0,60] seconds")
+    target=Path(directory)/".config.lock"
+    if target.is_symlink():raise ValueError("refuse symlink TGK configuration lock")
+    flags=os.O_CREAT|os.O_RDWR
+    if hasattr(os,"O_CLOEXEC"):flags|=os.O_CLOEXEC
+    if hasattr(os,"O_NOFOLLOW"):flags|=os.O_NOFOLLOW
+    fd=os.open(target,flags,0o600)
+    try:
+        metadata=os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink!=1:
+            raise ValueError("TGK config lock must be a regular non-linked file")
+        os.fchmod(fd,0o600)
+        deadline=time.monotonic()+timeout
+        while True:
+            try:
+                fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic()>=deadline:
+                    raise TimeoutError("timed out acquiring TGK config write lock")
+                time.sleep(min(0.025,max(0.001,deadline-time.monotonic())))
+        try:yield
+        finally:fcntl.flock(fd,fcntl.LOCK_UN)
+    finally:os.close(fd)
+
+
+def patch_config(changes, *, reset=(), lock_timeout=5.0):
     """Atomically replace multiple validated config fields in one transaction.
 
     The existing file is never replaced if validation or serialization fails.
-    No user preset file is overwritten. For concurrent writers use one process
-    or an external lock; this method prevents torn writes, not lost updates.
+    No preset file is overwritten. A stable private sibling lock serializes
+    independent writers across the complete read-merge-rename transaction.
+    The acquisition deadline is bounded to avoid indefinite blocking.
     """
     if not isinstance(changes,dict):
         raise ValueError("configuration patch must be an object")
@@ -215,57 +254,58 @@ def patch_config(changes, *, reset=()):
         raise ValueError("refuse symlink TGK configuration target")
     if not path.is_file():
         raise FileNotFoundError("run python -m tgk.config init before editing")
-    # Preserve unknown data rejection and the current persisted fields.
-    stored=_read_json(path)
-    merged=deepcopy(DEFAULT_CONFIG)
-    _merge(merged,stored)
-    _merge(merged,changes)
-    for section,key in reset_fields:
-        merged[section][key]=deepcopy(DEFAULT_CONFIG[section][key])
-    pinned=set(merged["pinned"])
-    pinned.update(changed)
-    pinned.difference_update(reset_names)
-    merged["pinned"]=sorted(pinned)
-    validate_config(merged)
-    # Validate selected preset before writing; a syntactically valid name
-    # without an installed profile must not poison the active config file.
-    option_config(merged["ui"]["option_profile"])
-    from .theme import PRESETS as THEMES,load_theme
-    theme_name=merged["ui"]["theme"]
-    theme_file=config_home()/"palettes"/(theme_name+".json")
-    if theme_file.is_file():load_theme(theme_file)
-    elif theme_name not in THEMES:raise ValueError("unknown theme preset "+theme_name)
-    from .typography import PRESETS as TEXT_PRESETS
-    text_name=merged["ui"]["text_style"]
-    text_file=config_home()/"text_styles"/(text_name+".json")
-    if text_file.is_file():
-        style_obj=_read_json(text_file)
-        if set(style_obj)-{"style","properties"} or not isinstance(style_obj.get("properties"),dict):
-            raise ValueError("invalid TGK text style preset")
-    elif text_name not in TEXT_PRESETS:raise ValueError("unknown text style "+text_name)
-    payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
-    if len(payload)>MAX_JSON_BYTES:raise ValueError("config would exceed size limit")
-    import tempfile
-    fd,temporary=tempfile.mkstemp(prefix=".tgk-config-",suffix=".tmp",dir=directory)
-    try:
-        with os.fdopen(fd,"wb") as out:
-            out.write(payload)
-            out.flush()
-            os.fsync(out.fileno())
-        os.chmod(temporary,0o600)
-        if path.is_symlink():
-            raise ValueError("refuse symlink TGK configuration target")
-        os.replace(temporary,path)
-        # Best-effort directory sync for durability after a crash.
+    with _config_write_lock(directory,timeout=lock_timeout):
+        # Preserve unknown data rejection and the current persisted fields.
+        stored=_read_json(path)
+        merged=deepcopy(DEFAULT_CONFIG)
+        _merge(merged,stored)
+        _merge(merged,changes)
+        for section,key in reset_fields:
+            merged[section][key]=deepcopy(DEFAULT_CONFIG[section][key])
+        pinned=set(merged["pinned"])
+        pinned.update(changed)
+        pinned.difference_update(reset_names)
+        merged["pinned"]=sorted(pinned)
+        validate_config(merged)
+        # Validate selected preset before writing; a syntactically valid name
+        # without an installed profile must not poison the active config file.
+        option_config(merged["ui"]["option_profile"])
+        from .theme import PRESETS as THEMES,load_theme
+        theme_name=merged["ui"]["theme"]
+        theme_file=config_home()/"palettes"/(theme_name+".json")
+        if theme_file.is_file():load_theme(theme_file)
+        elif theme_name not in THEMES:raise ValueError("unknown theme preset "+theme_name)
+        from .typography import PRESETS as TEXT_PRESETS
+        text_name=merged["ui"]["text_style"]
+        text_file=config_home()/"text_styles"/(text_name+".json")
+        if text_file.is_file():
+            style_obj=_read_json(text_file)
+            if set(style_obj)-{"style","properties"} or not isinstance(style_obj.get("properties"),dict):
+                raise ValueError("invalid TGK text style preset")
+        elif text_name not in TEXT_PRESETS:raise ValueError("unknown text style "+text_name)
+        payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
+        if len(payload)>MAX_JSON_BYTES:raise ValueError("config would exceed size limit")
+        import tempfile
+        fd,temporary=tempfile.mkstemp(prefix=".tgk-config-",suffix=".tmp",dir=directory)
         try:
-            directory_fd=os.open(directory,os.O_RDONLY)
-            try:os.fsync(directory_fd)
-            finally:os.close(directory_fd)
-        except OSError:pass
-    finally:
-        Path(temporary).unlink(missing_ok=True)
-    clear_config_cache()
-    return load_config()
+            with os.fdopen(fd,"wb") as out:
+                out.write(payload)
+                out.flush()
+                os.fsync(out.fileno())
+            os.chmod(temporary,0o600)
+            if path.is_symlink():
+                raise ValueError("refuse symlink TGK configuration target")
+            os.replace(temporary,path)
+            # Best-effort directory sync for durability after a crash.
+            try:
+                directory_fd=os.open(directory,os.O_RDONLY)
+                try:os.fsync(directory_fd)
+                finally:os.close(directory_fd)
+            except OSError:pass
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+        clear_config_cache()
+        return load_config()
 
 
 def update_config(section,key,value=None,*,reset=False):
