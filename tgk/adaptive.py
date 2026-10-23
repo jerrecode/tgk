@@ -131,9 +131,17 @@ class LayoutScale:
         return max(self.touch_target_dp,math.ceil(_positive(requested,"requested height")))
 
 
-def arrange_spans(children,columns=12,metrics=None):
-    """Pure first-fit row packing of child spans with deterministic bounds."""
-    if type(columns) is not int or columns<1:raise ValueError("invalid column count")
+def arrange_spans(children,columns=12,metrics=None,*,logical_columns=None):
+    """First-fit rows; optionally map logical design spans onto physical columns.
+
+    A 12-unit design may fit an 8-column physical grid: logical span 6
+    becomes 4 columns. Legacy calls retain the original column semantics.
+    """
+    if type(columns) is not int or not 1<=columns<=32:
+        raise ValueError("columns must be in 1..32")
+    if logical_columns is None:logical_columns=columns
+    if type(logical_columns) is not int or not 1<=logical_columns<=32:
+        raise ValueError("logical_columns must be in 1..32")
     if metrics is None:metrics=ScreenMetrics(393,852)
     positions=[]
     row=0;col=0
@@ -142,12 +150,13 @@ def arrange_spans(children,columns=12,metrics=None):
         if requested is None:
             choices={"compact":"span_compact","medium":"span_medium",
                      "expanded":"span_expanded"}
-            requested=getattr(widget,choices[metrics.size_class],columns)
-        if type(requested) is not int or not 1<=requested<=columns:
+            requested=getattr(widget,choices[metrics.size_class],logical_columns)
+        if type(requested) is not int or not 1<=requested<=logical_columns:
             raise ValueError("invalid responsive grid span")
-        if col+requested>columns:row+=1;col=0
-        positions.append((row,col,1,requested))
-        col+=requested
+        width=min(columns,max(1,round(requested*columns/logical_columns)))
+        if col+width>columns:row+=1;col=0
+        positions.append((row,col,1,width))
+        col+=width
         if col==columns:row+=1;col=0
     return positions
 
