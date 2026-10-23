@@ -38,8 +38,10 @@ class InputFrameTests(unittest.TestCase):
         self.assertEqual(field._native.settext_value,('ABCD',))
 
     def test_tab_and_screen_children_fill_frame_viewport(self):
+        class TabNative(FakeTG._View):
+            def selecttab(self,index):self.selected=index
         class TabTG(FakeTG):
-            TabLayout=FakeTG._View
+            TabLayout=TabNative
         for manager in (ScreenManager(),TabbedPanel()):
             backend=TermuxBackend(tg=TabTG)
             backend.activity=FakeTG.Activity(None)
@@ -61,6 +63,33 @@ class InputFrameTests(unittest.TestCase):
         backend.render(root)
         self.assertEqual(child._native.setwidth_value,('MATCH_PARENT',))
         self.assertEqual(child._native.setheight_value,('MATCH_PARENT',))
+
+    def test_scroll_content_fills_width_but_retains_scrollable_height(self):
+        from tgk.widgets import ScrollView,BoxLayout
+        backend=TermuxBackend(tg=FakeTG)
+        backend.activity=FakeTG.Activity(None)
+        scroll=ScrollView()
+        content=BoxLayout(orientation='vertical')
+        scroll.add_widget(content)
+        backend.render(scroll)
+        self.assertEqual(content._native.setwidth_value,('MATCH_PARENT',))
+        self.assertFalse(hasattr(content._native,'setheight_value'))
+
+    def test_gallery_can_switch_scenarios_without_activity_recreation(self):
+        from tgk.demos import Gallery
+        from tgk.widgets import Button
+        gallery=Gallery(scenarios=['01_basics','02_rows'])
+        root=gallery.build()
+        self.assertEqual(len(gallery.manager.children),3)
+        self.assertEqual(gallery.manager.current,'catalog')
+        gallery.show('02_rows')
+        self.assertEqual(gallery.manager.current,'02_rows')
+        close=[w for w in gallery.manager.children[2].walk()
+               if isinstance(w,Button) and w.text=='Close']
+        self.assertEqual(len(close),1)
+        close[0].dispatch('on_release')
+        self.assertEqual(gallery.manager.current,'catalog')
+        self.assertIs(root.children[0],gallery.manager)
 
     def test_explicit_popup_size_not_overridden_by_frame_fill(self):
         backend=TermuxBackend(tg=FakeTG)
