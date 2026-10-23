@@ -76,7 +76,31 @@ def _safe_name(value):
 
 
 def _read_json(path):
-    with Path(path).open("rb") as stream:
+    """Read bounded JSON from one regular, nonlinked file descriptor.
+
+    Prevent selected custom presets or config files bypassing audit safety by
+    following symlinks, FIFOs or a filename replaced between check and open.
+    Opening O_NONBLOCK avoids hanging on a FIFO before fstat rejects it.
+    """
+    import errno
+    path=Path(path)
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError("TGK JSON symlink path is not allowed: "+str(path))
+    flags=os.O_RDONLY
+    if hasattr(os,"O_CLOEXEC"):flags|=os.O_CLOEXEC
+    if hasattr(os,"O_NONBLOCK"):flags|=os.O_NONBLOCK
+    if hasattr(os,"O_NOFOLLOW"):flags|=os.O_NOFOLLOW
+    try:fd=os.open(path,flags)
+    except OSError as exc:
+        if exc.errno==errno.ELOOP:
+            raise ValueError("TGK JSON symlink path is not allowed: "+str(path)) from exc
+        raise
+    with os.fdopen(fd,"rb") as stream:
+        details=os.fstat(stream.fileno())
+        if not stat.S_ISREG(details.st_mode) or details.st_nlink!=1:
+            raise ValueError("TGK JSON must be a regular nonlinked file: "+str(path))
+        if details.st_size>MAX_JSON_BYTES:
+            raise ValueError("TGK JSON file exceeds size limit")
         raw=stream.read(MAX_JSON_BYTES+1)
     if len(raw)>MAX_JSON_BYTES:raise ValueError("TGK JSON file exceeds size limit")
     value=json.loads(raw)
