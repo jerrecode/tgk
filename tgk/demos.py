@@ -459,6 +459,11 @@ class Gallery(App):
         outer.add_widget(manager)
         return outer
 
+    def on_start(self):
+        # Reuse the single Gallery backend for live palette edits and
+        # coalesced RGB updates in each already constructed scenario.
+        for lab in self.labs.values():lab._backend=self._backend
+
     def show(self,scenario):
         return self.manager.switch(scenario)
 
