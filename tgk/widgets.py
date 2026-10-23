@@ -322,7 +322,11 @@ class TermuxBackend:
         self._stop_requested=False
         from .adaptive import LayoutScale
         self.screen_metrics=None
-        self.layout_scale=layout_scale or LayoutScale()
+        from .config import configured_layout_scale,load_config
+        self.layout_scale=layout_scale or configured_layout_scale()
+        configured_runtime=load_config()["runtime"]
+        self.clock_callbacks_per_tick=configured_runtime["clock_callbacks_per_tick"]
+        self.idle_sleep_seconds=configured_runtime["idle_sleep_seconds"]
         if not isinstance(self.layout_scale,LayoutScale):
             raise TypeError('layout_scale must be a LayoutScale')
         self.orientation_mode='system'
