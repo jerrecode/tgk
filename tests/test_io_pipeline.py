@@ -103,18 +103,26 @@ class StreamTests(unittest.TestCase):
         self.assertEqual((self.root/'download').read_bytes(),b'download payload')
 
     def test_ffprobe_parses_bounded_json_and_error(self):
+        import os
         source=self.root/'film.mkv';source.write_bytes(b'dummy')
         class Process:
+            payload=b'{"streams":[{"codec_name":"h264"}],"format":{}}'
             def __init__(self,argv,stdin,stdout,stderr,close_fds):
                 self.argv=argv
-                stdout.write(b'{"streams":[{"codec_name":"h264"}],"format":{}}')
-            def wait(self,timeout):return 0
+                read,write=os.pipe()
+                os.write(write,self.payload);os.close(write)
+                self.stdout=os.fdopen(read,'rb',buffering=0)
+                read,write=os.pipe()
+                os.close(write)
+                self.stderr=os.fdopen(read,'rb',buffering=0)
+            def wait(self,timeout=None):return 0
+            def poll(self):return 0
+            def kill(self):pass
         with patch('subprocess.Popen',side_effect=Process):
             data=ffprobe(source)
         self.assertEqual(data['streams'][0]['codec_name'],'h264')
         class OversizeProcess(Process):
-            def __init__(self,argv,stdin,stdout,stderr,close_fds):
-                stdout.write(b'x'*2048)
+            payload=b'x'*2048
         with patch('subprocess.Popen',side_effect=OversizeProcess):
             with self.assertRaisesRegex(ValueError,'too large'):
                 ffprobe(source,max_json_bytes=1024)
