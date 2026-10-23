@@ -146,14 +146,23 @@ def _validate_overrides(overrides):
 class Theme:
     name: str
     colors: Mapping
+    pinned_roles: frozenset[str]|None=None
 
     def __post_init__(self):
         if not isinstance(self.name,str) or not self.name:
             raise ValueError("theme name must be a nonempty string")
         supplied=_validate_overrides(self.colors)
-        missing=set(ROLES)-set(supplied)
-        if missing:raise ValueError("missing color roles: "+", ".join(sorted(missing)))
+        missing=set(BASE_ROLES)-set(supplied)
+        if missing:raise ValueError("missing base color roles: "+", ".join(sorted(missing)))
+        if self.pinned_roles is None:
+            pinned=frozenset(set(supplied)&set(DERIVED_ROLES))
+        else:
+            pinned=frozenset(self.pinned_roles)
+        if pinned-set(DERIVED_ROLES):
+            raise ValueError("pinned roles must name derived color roles")
+        supplied.update({k:v for k,v in _derived(supplied).items() if k not in supplied})
         object.__setattr__(self,"colors",MappingProxyType(supplied))
+        object.__setattr__(self,"pinned_roles",pinned)
 
     def __getitem__(self,role):
         return self.colors[role]
@@ -162,10 +171,11 @@ class Theme:
         overrides=_validate_overrides(colors)
         result=dict(self.colors)
         result.update(overrides)
+        pinned=self.pinned_roles | frozenset(set(overrides)&set(DERIVED_ROLES))
         if set(overrides)&set(BASE_ROLES):
             derived=_derived(result)
-            result.update({k:v for k,v in derived.items() if k not in overrides})
-        return Theme(self.name,result)
+            result.update({k:v for k,v in derived.items() if k not in pinned})
+        return Theme(self.name,result,pinned_roles=pinned)
 
     def to_dict(self):
         return {"name":self.name,"colors":dict(self.colors)}
@@ -176,7 +186,8 @@ def resolve_theme(theme=None, overrides=None):
         if theme is None:theme=DEFAULT_NAME
         if theme not in PRESETS:
             raise ValueError(f"unknown theme {theme!r}; use one of: {', '.join(PRESETS)}")
-        base=Theme(theme,PRESETS[theme])
+        base=Theme(theme,{k:PRESETS[theme][k] for k in BASE_ROLES},
+                   pinned_roles=frozenset())
     return base.override(**overrides) if overrides else base
 
 def load_theme(path):
