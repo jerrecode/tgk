@@ -362,7 +362,7 @@ def main(argv=None):
     import argparse
     parser=argparse.ArgumentParser(description="Initialize/read persistent TGK configuration")
     parser.add_argument("action",choices=("init","show","path","validate",
-                                          "get","set","profiles"),nargs="?",default="show")
+                                          "get","set","reset","profiles"),nargs="?",default="show")
     parser.add_argument("section",nargs="?")
     parser.add_argument("key",nargs="?")
     parser.add_argument("value",nargs="?")
@@ -378,7 +378,7 @@ def main(argv=None):
         result={"available":sorted(set(OPTIONS)|{
             p.stem for p in (config_home()/"options").glob("*.json")
             if p.is_file() and _SAFE_NAME.fullmatch(p.stem)})}
-    elif args.action in ("get","set"):
+    elif args.action in ("get","set","reset"):
         if args.section is None or args.key is None:
             parser.error(args.action+" requires SECTION KEY")
         if args.section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[args.section],dict):
@@ -389,6 +389,9 @@ def main(argv=None):
             if args.value is not None:parser.error("get accepts SECTION KEY only")
             result={"section":args.section,"key":args.key,
                     "value":load_config()[args.section][args.key]}
+        elif args.action=="reset":
+            if args.value is not None:parser.error("reset accepts SECTION KEY only")
+            result=update_config(args.section,args.key,None,reset=True)
         else:
             if args.value is None:parser.error("set requires SECTION KEY JSON_VALUE")
             try:value=json.loads(args.value)
