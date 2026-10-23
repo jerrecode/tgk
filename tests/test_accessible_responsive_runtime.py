@@ -50,9 +50,7 @@ class AdaptiveContractTests(unittest.TestCase):
         backend=TermuxBackend(tg=FakeTG,layout_scale=LayoutScale())
         backend.activity=FakeTG.Activity(None)
         backend.screen_metrics=ScreenMetrics(393,852,font_scale=1.0)
-        root=Button(text='Root',height=None)
-        # Unspecified height means no 'height' attribute in this framework:
-        del root.height
+        root=Button(text='Root')
         backend.render(root)
         self.assertEqual(root._native.setheight_value,('MATCH_PARENT',))
         backend.screen_metrics=ScreenMetrics(393,852,font_scale=1.5)
