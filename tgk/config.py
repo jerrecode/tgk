@@ -206,7 +206,7 @@ def patch_config(changes):
     updated=deepcopy(raw)
     _merge(updated,changes)
     _validated_config_patch(updated)
-    encoded=(json.dumps(updated,indent=2,sort_keys=True,ensure_ascii=False)+"\\n").encode("utf-8")
+    encoded=(json.dumps(updated,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
     if len(encoded)>MAX_JSON_BYTES:
         raise ValueError("TGK configuration exceeds size limit")
     import tempfile
