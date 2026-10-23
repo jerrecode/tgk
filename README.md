@@ -512,6 +512,76 @@ ZIP under that run's artifacts. All SVG samples are XML-validated in unit
 tests. Android native image controls still need PNG/JPEG bytes rather than
 SVG source: use the generated raster assets or a trusted on-device renderer.
 
+## Persistent user configuration, palettes, typography and option presets
+
+Installation now creates (if missing) the user's TGK settings at
+`$TGK_CONFIG_HOME`, or `$XDG_CONFIG_HOME/tgk`, or `~/.config/tgk`.
+**Existing files are preserved without replacement on every reinstall.**
+
+```text
+~/.config/tgk/
+├── config.json                  # application defaults and core runtime budgets
+└── presets/
+    ├── colors.json             # all shipped palettes; editable base color roles
+    ├── typography.json         # all shipped text presets; editable style properties
+    └── options.json            # balanced, compact, accessible, performance
+```
+
+`config.json` selects `defaults.palette` (initially `midnight`),
+`defaults.typography` (initially `body`) and `defaults.options`
+(initially `balanced`). UI settings include default orientation
+(system/portrait/landscape), window mode and per-field LayoutScale
+overrides. Runtime controls cover maximum Clock callbacks per tick and
+idle-loop sleep. Bounded I/O settings include chunk size, transfer limit,
+timeouts, number of workers and pending tasks. Additional stored settings
+cover target renderer Hz, maximum canvas pixel budget and the three icon
+raster export sizes. These fields are validated and exposed; some rendering
+budgets remain informational until supported by the corresponding native
+driver.
+
+```sh
+# Shell: created automatically by install.sh, safe to repeat
+python -m tgk.config init --json
+python -m tgk.config validate --json
+python -m tgk.config show --json
+python -m tgk.config paths --json
+```
+
+For example, edit `config.json` to select a different persistent default:
+
+```json
+{
+  "schema_version": 1,
+  "defaults": {
+    "palette": "ocean",
+    "typography": "terminal",
+    "options": "accessible"
+  },
+  "ui": {
+    "orientation": "system",
+    "window_mode": "normal",
+    "layout_overrides": {"touch_target_dp": 56}
+  },
+  "runtime": {"clock_max_callbacks": 96},
+  "io": {"workers": 2, "pending": 4}
+}
+```
+
+Omitted settings fall back to validated built-in defaults. Named
+palettes/text styles can be added to their registry JSON; palette
+definitions need the 17 base color roles and may also override derived roles.
+Values changed in existing presets are honored in fresh processes, while
+explicit `App(theme=..., text_style=..., layout_scale=...)`, CLI options,
+and per-object styling override configuration. All four files are bounded
+to 1 MiB; invalid schema/value data raises actionable validation errors
+instead of silently changing settings. Call `tgk.config.clear_cache()`
+when deliberately editing files from a *running* Python process.
+
+The default icon-export resolutions are read from `config.json` by
+`build_assets` unless explicit `low/mid/high` values are supplied.
+The C renderer and FFprobe remain optional separate runtime dependencies;
+no untrusted JSON is executed as Python code.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
