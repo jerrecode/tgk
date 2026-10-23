@@ -245,6 +245,7 @@ class TermuxBackend:
         self.connection=None; self.activity=None;self.nodes=[]
         self._slider_resources=[]
         self._canvas_resources=[]
+        self._stop_requested=False
         if window_mode not in ('normal','dialog','overlay'):
             raise ValueError("window_mode must be normal, dialog or overlay")
         self.window_mode=window_mode
@@ -292,6 +293,7 @@ class TermuxBackend:
         if isinstance(node,(Label,TextInput)):
             self._paint_text(node,selected)
         if isinstance(node,RichTextLabel):
+            node._inherited_text_style=self.text_style
             native.setdata(node.html())
         if isinstance(node,Slider) and node._slider_draw is not None:
             node._slider_draw()
@@ -351,6 +353,7 @@ class TermuxBackend:
         elif isinstance(node,RichTextLabel):
             native=tg.WebView(a,parent)
             native.setheight(int(getattr(node,'height',120)))
+            node._inherited_text_style=self.text_style
             native.setdata(node.html())
         elif isinstance(node,InfiniteCanvas):
             native=tg.ImageView(a,parent)
@@ -553,9 +556,14 @@ class TermuxBackend:
 
     def render(self,root):
         return self._make(root,None)
+    def stop(self):
+        """Stop the event loop even for overlays without destroy lifecycle events."""
+        self._stop_requested=True
+        if self.activity is not None:self.activity.finish()
+
     def event(self,e):
         from .advanced import TabbedPanel,InfiniteCanvas
-        if e.type=='back':self.activity.finish();return
+        if e.type=='back':self.stop();return
         if e.type=='destroy':return
         if e.type not in ('click','text','itemselected','touch'):return
         match=e.value.get('id')
@@ -606,14 +614,14 @@ class TermuxBackend:
                 self.render(root)
                 if on_start: on_start()
                 running=True
-                while running:
+                while running and not self._stop_requested:
                     event=c.checkevent()
                     if event is not None:
                         self.event(event)
                         if event.type=='destroy' and event.value.get('finishing',False):
                             running=False
                     Clock.tick()
-                    if event is None:
+                    if event is None and not self._stop_requested:
                         time.sleep(0.01)
             finally:
                 # Relinquish C's exported mmap reference before closing the buffer.
@@ -635,6 +643,7 @@ class TermuxBackend:
                     node._effective_theme=None
                     if hasattr(node,'_sync_views'):node._sync_views=None
                     if hasattr(node,'_tab_bar'):node._tab_bar=None
+                    if hasattr(node,'_inherited_text_style'):node._inherited_text_style=None
                 self.activity=None
                 self.connection=None
 
@@ -682,4 +691,4 @@ class App(EventDispatcher):
             try:self.on_stop()
             finally:App._running_app=None
     def stop(self):
-        if self._backend and self._backend.activity:self._backend.activity.finish()
+        if self._backend:self._backend.stop()
