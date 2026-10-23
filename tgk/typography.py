@@ -31,8 +31,38 @@ PRESETS=MappingProxyType({
     "danger":dict(family="sans",size=16,weight=700,role="danger"),
     "muted":dict(family="sans",size=14,weight=400,role="muted"),
     "link":dict(family="sans",size=16,weight=500,role="accent",underline=True),
+    "title_h1":dict(family="sans",size=32,weight=700),
+    "title_h2":dict(family="sans",size=27,weight=700),
+    "title_h3":dict(family="sans",size=23,weight=600),
+    "title_h4":dict(family="sans",size=20,weight=600),
+    "title_h5":dict(family="sans",size=18,weight=600),
+    "description":dict(family="sans",size=16,weight=400),
+    "hyperlink":dict(family="sans",size=16,weight=500,role="link",underline=True),
+    "filesystem_link":dict(family="mono",size=14,weight=500,role="link"),
+    "comment":dict(family="mono",size=13,role="muted",italic=True),
+    "reference":dict(family="serif",size=14,role="muted"),
+    "footnote":dict(family="serif",size=12,role="muted"),
+    "data":dict(family="mono",size=15),
+    "metadata":dict(family="mono",size=12,role="muted"),
+    "tabular":dict(family="mono",size=14),
+    "button":dict(family="sans",size=16,weight=600,role="button_text"),
+    "rich":dict(family="serif",size=17),
+    "highlighted":dict(family="sans",size=16,weight=700,role="highlight"),
+    "subscript":dict(family="sans",size=12),
+    "superscript":dict(family="sans",size=12),
+    "info":dict(family="sans",size=14,role="muted"),
+    "label":dict(family="sans",size=14,weight=500),
+    "selected":dict(family="sans",size=16,weight=700,role="text_selected"),
+    "unselected":dict(family="sans",size=16,role="text_unselected"),
+    "table_header":dict(family="sans",size=14,weight=700),
+    "table_cell":dict(family="sans",size=14),
+    "input":dict(family="sans",size=16),
+    "menu":dict(family="sans",size=16,weight=500),
+    "notification":dict(family="sans",size=14,weight=500),
 })
-ROLES=("text","muted","accent","success","warning","danger","button_text")
+
+ROLES=("text","muted","accent","success","warning","danger","button_text",
+       "link","text_selected","text_unselected","highlight")
 @dataclass(frozen=True)
 class TextStyle:
     family:str="sans"
