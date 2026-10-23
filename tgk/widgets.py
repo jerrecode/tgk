@@ -321,10 +321,14 @@ class TermuxBackend:
         self._canvas_resources=[]
         self._stop_requested=False
         from .adaptive import LayoutScale
+        from .config import configured_layout_scale,load_config
         self.screen_metrics=None
-        self.layout_scale=layout_scale or LayoutScale()
+        self.layout_scale=layout_scale if layout_scale is not None else configured_layout_scale()
         if not isinstance(self.layout_scale,LayoutScale):
             raise TypeError('layout_scale must be a LayoutScale')
+        runtime=load_config()['runtime']
+        self.clock_callbacks_per_tick=runtime['clock_callbacks_per_tick']
+        self.idle_sleep_seconds=runtime['idle_sleep_seconds']
         self.orientation_mode='system'
         if window_mode not in ('normal','dialog','overlay'):
             raise ValueError("window_mode must be normal, dialog or overlay")
