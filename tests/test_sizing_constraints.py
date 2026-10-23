@@ -74,6 +74,17 @@ class SizingTests(unittest.TestCase):
         self.assertEqual(grid.span_units,12)
         with self.assertRaises(ValueError):ResponsiveGrid(cols=0)
 
+    def test_running_app_policy_overrides_persistent_grid_columns(self):
+        from tgk.widgets import App
+        from tgk.adaptive import LayoutScale
+        old=App._running_app
+        try:
+            App._running_app=SimpleNamespace(layout_scale=LayoutScale(columns=8))
+            self.assertEqual(ResponsiveGrid().cols,8)
+            self.assertEqual(ResponsiveGrid(cols=6).cols,6)
+        finally:
+            App._running_app=old
+
     def test_native_reflow_and_size_updates_only_after_real_metric_changes(self):
         class Native:
             def __init__(self):self.calls=[]
