@@ -161,7 +161,12 @@ class ResponsiveGrid(GridLayout):
     """
     def __init__(self,cols=None,span_units=12,**kwargs):
         from .config import configured_layout_scale
-        if cols is None:cols=configured_layout_scale().columns
+        if cols is None:
+            # App.run() registers the app before build(), so per-instance
+            # LayoutScale options override persisted user defaults.
+            app=App.get_running_app()
+            cols=(app.layout_scale.columns if app is not None
+                  else configured_layout_scale().columns)
         if type(cols) is not int or not 1<=cols<=32:raise ValueError('cols must be 1..32')
         if type(span_units) is not int or not 1<=span_units<=32:
             raise ValueError('span_units must be 1..32')
