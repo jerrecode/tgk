@@ -138,6 +138,68 @@ class PersistentConfigTests(unittest.TestCase):
         self.assertEqual(config.configured_io_limits().workers,3)
         with self.assertRaises(ValueError):config.option_config("../outside")
 
+    def test_atomic_multifield_patch_and_profiles(self):
+        config.initialize_config()
+        old=(self.dir/"config.json").read_bytes()
+        settings=config.patch_config({
+            "ui":{"theme":"ocean","text_style":"title_h2",
+                  "option_profile":"battery_saver"},
+            "layout":{"touch_target_dp":60},
+        })
+        self.assertEqual(settings["ui"]["theme"],"ocean")
+        self.assertEqual(settings["ui"]["text_style"],"title_h2")
+        self.assertEqual(settings["io"]["workers"],1)
+        self.assertEqual(settings["runtime"]["clock_callbacks_per_tick"],48)
+        self.assertEqual(settings["layout"]["touch_target_dp"],60)
+        self.assertNotEqual(old,(self.dir/"config.json").read_bytes())
+        single=config.update_config("io","workers",3)
+        self.assertEqual(single["io"]["workers"],3)
+        self.assertEqual(single["ui"]["theme"],"ocean")
+        self.assertEqual(config.load_config(),single)
+
+    def test_atomic_updates_rollback_on_invalid_input(self):
+        config.initialize_config()
+        before=(self.dir/"config.json").read_bytes()
+        for value in (999,-1,False,float("nan")):
+            with self.subTest(value=value),self.assertRaises(ValueError):
+                config.update_config("io","workers",value)
+            self.assertEqual((self.dir/"config.json").read_bytes(),before)
+        for change in (
+            {"ui":{"option_profile":"not_a_real_profile"}},
+            {"ui":{"theme":"no_such_palette"}},
+            {"ui":{"text_style":"invalid_style"}},
+            {"layout":{"columns":0}},
+            {"unknown":{}},
+        ):
+            with self.subTest(change=change),self.assertRaises(ValueError):
+                config.patch_config(change)
+            self.assertEqual((self.dir/"config.json").read_bytes(),before)
+        self.assertFalse(list(self.dir.glob(".tgk-config-*")))
+
+    def test_symlink_target_rejected_without_touching_source(self):
+        config.initialize_config()
+        path=self.dir/"config.json"
+        before=path.read_bytes()
+        outside=self.dir.parent/"outside.json"
+        outside.write_bytes(before)
+        path.unlink()
+        path.symlink_to(outside)
+        with self.assertRaisesRegex(ValueError,"symlink"):
+            config.update_config("ui","theme","ocean")
+        self.assertEqual(outside.read_bytes(),before)
+        self.assertEqual(path.read_bytes(),before)
+
+    def test_preset_edits_are_preserved_when_updating_config(self):
+        config.initialize_config()
+        palette=self.dir/"palettes"/"midnight.json"
+        custom=palette.read_text().replace("#","X",1)
+        # Do not require a palette file to be valid until selected/loading it.
+        palette.write_text(custom)
+        config.update_config("ui","text_style","body")
+        self.assertEqual(palette.read_text(),custom)
+        for f in (self.dir/"text_styles").glob("*.json"):
+            self.assertGreater(f.stat().st_size,0)
+
     def test_config_entrypoint_reports_json(self):
         with redirect_stdout(StringIO()) as output:
             self.assertEqual(config.main(["init"]),0)
