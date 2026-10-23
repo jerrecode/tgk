@@ -24,7 +24,9 @@ jobs:
         run: |
           python -m tgk.icon_builder --output "$RUNNER_TEMP" --raster --max-icons 1500
           python - <<'PY'
-          import json,os,pathlib
+          import hashlib,json,os,pathlib
+          from PIL import Image
+          from xml.etree import ElementTree as ET
           root=pathlib.Path(os.environ["RUNNER_TEMP"])/"icons"
           manifest=json.loads((root/"manifest.json").read_text())
           n=len(manifest["icons"])
@@ -34,6 +36,25 @@ jobs:
                                   ("mid_res","png",1),("mid_res","jpg",1),
                                   ("high_res","png",1),("high_res","jpg",1)):
               assert len(list((root/folder).glob("*."+ext)))==n,(folder,ext)
+          actual={p.relative_to(root).as_posix() for p in root.rglob("*")
+                  if p.is_file() and p.name!="manifest.json"}
+          assert actual==set(manifest["files"])
+          for relative,record in manifest["files"].items():
+              path=root/relative
+              data=path.read_bytes()
+              assert record=={"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data)},relative
+              if path.suffix==".svg":
+                  ET.fromstring(data)
+              else:
+                  with Image.open(path) as image:
+                      image.load()
+                      assert image.format=={".png":"PNG",".jpg":"JPEG",".ico":"ICO"}[path.suffix]
+                      if path.suffix==".ico":
+                          for size in image.ico.sizes():
+                              image.ico.getimage(size).load()
+                      else:
+                          size=manifest["sizes"][{"low_res":"low","mid_res":"mid","high_res":"high"}[path.parent.name]]
+                          assert image.size==(size,size),relative
           print("Verified rendered icons:",n)
           PY
       - name: Archive vector and raster icon variants

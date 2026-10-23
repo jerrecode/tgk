@@ -6,6 +6,9 @@
 
 ## Install on Android/Termux
 
+Hardware verification steps and the screenshot/keyboard/orientation matrix
+are in [docs/android-validation.md](docs/android-validation.md).
+
 Install the **Termux:GUI Android plugin** separately and ensure it matches the Termux installation. Then in Termux:
 
 ```sh
@@ -522,7 +525,7 @@ the empty output directories are tracked for discoverability.
 
 ```sh
 # Standard library SVG-only export for all supported recipes.
-python -m tgk.icon_builder --output /tmp --overwrite
+python -m tgk.icon_builder --output /tmp --svg-only --overwrite
 
 # Generate all three PNG and JPEG resolutions plus multiresolution ICO.
 # CairoSVG and Pillow are optional, user-installed renderer dependencies.
@@ -541,10 +544,23 @@ uses system fonts, so its pixel-level appearance depends on the selected
 rendering backend; names and metadata are deterministic.
 
 A separate `Layered TGK icon asset pack` GitHub Actions workflow runs the
-whole raster conversion, verifies output counts, and uploads a downloadable
+whole raster conversion, verifies output hashes, decoded formats, dimensions
+and every ICO frame, and uploads a downloadable
 ZIP under that run's artifacts. All SVG samples are XML-validated in unit
 tests. Android native image controls still need PNG/JPEG bytes rather than
 SVG source: use the generated raster assets or a trusted on-device renderer.
+
+The module CLI uses saved `icons.raster` unless `--raster` or `--svg-only`
+is explicit. Each manifest's additive `files` map records the SHA-256 and
+byte length of every SVG/PNG/JPEG/ICO file. Identical sources, settings,
+fonts and renderer versions produce identical files and manifests; different
+system fonts or CairoSVG/Pillow versions can change raster bytes. Tiny valid
+resolutions still emit a readable ICO with at least one fitting frame.
+Name iterables are consumed only up to `max_icons + 1` entries, including
+duplicates, before validation. Create-only builds recheck the destination
+after rendering and preserve catalogs that appeared during that work.
+Do not concurrently edit/replace the output directory from another process
+during explicit `--overwrite` publication.
 
 ### Concurrent configuration edits (0.6.7)
 
