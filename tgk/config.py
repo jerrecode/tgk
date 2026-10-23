@@ -138,7 +138,9 @@ def _cache_for_root(root):
     for section in ("defaults","ui","runtime","io","render","icons"):
         incoming=raw.get(section,{})
         if not isinstance(incoming,dict):raise ValueError(section+" must be an object")
-        if set(incoming)-set(defaults[section]):
+        allowed=(set(("clock_max_callbacks","idle_sleep_ms"))
+                 if section=="runtime" else set(defaults[section]))
+        if set(incoming)-allowed:
             raise ValueError("unknown TGK config option in "+section)
         defaults[section].update(incoming)
     _validate_config(defaults)
