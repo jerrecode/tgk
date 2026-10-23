@@ -114,6 +114,24 @@ class SemanticTokenTests(unittest.TestCase):
         self.assertEqual(selected['button_pressed'],'#AABBCCFF')
         self.assertEqual(selected['button_active'],changed['button_active'])
 
+    def test_legacy_theme_mapping_and_pinned_derived_roles(self):
+        from tgk.theme import BASE_ROLES,Theme
+        original=resolve_theme('ocean')
+        legacy={name:original[name] for name in BASE_ROLES}
+        reconstructed=Theme('legacy-custom',legacy)
+        self.assertEqual(set(reconstructed.colors),set(ROLES))
+        self.assertEqual(reconstructed['button_pressed'],original['button_pressed'])
+        # Keep explicit child/widget-derived overrides across unrelated
+        # ancestor base role changes and theme edits.
+        custom=original.override(button_pressed='#AABBCC')
+        updated=custom.override(text='#010203')
+        self.assertEqual(updated['button_pressed'],'#AABBCCFF')
+        updated_again=updated.override(button='#334455')
+        self.assertEqual(updated_again['button_pressed'],'#AABBCCFF')
+        self.assertNotEqual(updated_again['button_active'],custom['button_active'])
+        with self.assertRaisesRegex(ValueError,'base'):
+            Theme('incomplete',{'accent':'#112233'})
+
     def test_extended_text_presets_have_valid_roles(self):
         for name in ('title_h1','title_h5','metadata','tabular','filesystem_link',
                      'footnote','comment','selected','unselected','table_header',
