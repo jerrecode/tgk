@@ -20,6 +20,25 @@ def __getattr__(name):
         result=getattr(import_module('.theme',__name__),name)
         globals()[name]=result
         return result
+    if name in ('Screen','ScreenManager','TabbedPanel','Tab','PageView',
+                'Popup','RichTextLabel','IconLabel','InfiniteCanvas'):
+        from importlib import import_module
+        result=getattr(import_module('.advanced',__name__),name)
+        globals()[name]=result
+        return result
+    if name in ('TextStyle','TextSpan','PRESETS_TEXT','resolve_text_style',
+                'get_text_style','set_text_style','rich_html'):
+        from importlib import import_module
+        module=import_module('.typography',__name__)
+        result=module.PRESETS if name=='PRESETS_TEXT' else getattr(module,name)
+        globals()[name]=result
+        return result
+    if name in ('Icon','ICONS','CATEGORIES','EXTENSION_ICONS','glyph',
+                'icon_for_path','icon_names','svg'):
+        from importlib import import_module
+        result=getattr(import_module('.icons',__name__),name)
+        globals()[name]=result
+        return result
     if name=='Builder':
         from .kv import Builder
         globals()[name]=Builder
