@@ -405,10 +405,73 @@ class Laboratory(App):
         self.announce(f"Task {index+1}: {self.input.text}")
 
 
+class Gallery(App):
+    """Single-Activity demo catalogue; switching never opens a second Activity.
+
+    Pages are prebuilt to work with the native backend's static widget tree.
+    Keep only intended scenario pages to cap Android View/Canvas allocations.
+    """
+    def __init__(self,scenarios=None,**kwargs):
+        if scenarios is None:scenarios=tuple(SCENARIOS)
+        chosen=tuple(dict.fromkeys(scenarios))
+        if not chosen or any(name not in SCENARIOS for name in chosen):
+            raise ValueError('gallery needs valid scenario names')
+        self.scenarios=chosen
+        self.labs={}
+        self.manager=None
+        super().__init__(**kwargs)
+
+    def build(self):
+        from .advanced import ScreenManager,Screen
+        from .layout_helpers import compact_action_bar,action_width
+        outer=BoxLayout(orientation='vertical')
+        manager=ScreenManager(current='catalog',weight=1)
+        self.manager=manager
+        catalog=Screen(name='catalog',title='TGK demo gallery')
+        catalog.add_widget(Label(text='TGK • INTERACTIVE DEMO GALLERY',
+                                 height=58,text_style='title_h3',halign='center'))
+        catalog.add_widget(Label(text='Select a demo. Close returns here without opening '
+                                 'another Termux:GUI Activity.',height=70))
+        scroll=ScrollView(weight=1)
+        entries=panel(padding=8,spacing=5)
+        for name in self.scenarios:
+            button=Button(text=name,width=action_width(name),height=48)
+            button.bind(on_release=lambda _sender,name=name:self.show(name))
+            entries.add_widget(button)
+            entries.add_widget(Label(text=SCENARIOS[name],height=48,
+                                     text_style='caption'))
+        scroll.add_widget(entries)
+        catalog.add_widget(scroll)
+        catalog.add_widget(compact_action_bar('Close',self.stop))
+        manager.add_widget(catalog)
+        for name in self.scenarios:
+            lab=Laboratory(name,theme=self.theme,text_style=self.text_style)
+            # Override the two Activity-specific Lab operations: all pages
+            # belong to this Gallery App and its single native backend.
+            lab.stop=self.show_menu
+            lab.set_theme=self.set_theme
+            page=Screen(name=name,title=name)
+            body=lab.build()
+            body.weight=1
+            page.add_widget(body)
+            manager.add_widget(page)
+            self.labs[name]=lab
+        outer.add_widget(manager)
+        return outer
+
+    def show(self,scenario):
+        return self.manager.switch(scenario)
+
+    def show_menu(self):
+        return self.manager.switch('catalog')
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demo",choices=tuple(SCENARIOS),default="12_studio")
     parser.add_argument("--list",action="store_true")
+    parser.add_argument("--gallery",action="store_true",
+                        help='single native Activity containing selectable demo views')
     parser.add_argument("--theme",choices=tuple(PRESETS),default=get_theme().name)
     parser.add_argument("--color",action="append",default=[],metavar="ROLE=#HEX")
     args=parser.parse_args(argv)
@@ -422,7 +485,8 @@ def main(argv=None):
         overrides[role.strip()]=value.strip()
     try:selected=resolve_theme(args.theme,overrides)
     except ValueError as exc:parser.error(str(exc))
-    Laboratory(scenario=args.demo,theme=selected).run()
+    if args.gallery:Gallery(theme=selected).run()
+    else:Laboratory(scenario=args.demo,theme=selected).run()
     return 0
 
 
