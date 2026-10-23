@@ -39,7 +39,7 @@ def default_config():
         "schema_version":SCHEMA_VERSION,
         "defaults":{"palette":"midnight","typography":"body","options":"balanced"},
         "ui":{"orientation":"system","window_mode":"normal","layout_overrides":{}},
-        "runtime":{"clock_max_callbacks":128,"idle_sleep_ms":10},
+        "runtime":{},
         "io":{"chunk_bytes":65536,"max_bytes":268435456,"timeout":30,
               "workers":2,"pending":4},
         "render":{"target_frame_hz":30,"max_canvas_pixels":1048576},
@@ -160,9 +160,11 @@ def _validate_config(cfg):
     if set(ui["layout_overrides"])-set(LayoutScale.__dataclass_fields__):
         raise ValueError("unknown layout override")
     rt=cfg["runtime"]
-    if type(rt["clock_max_callbacks"]) is not int or not 1<=rt["clock_max_callbacks"]<=100000:
+    if "clock_max_callbacks" in rt and (type(rt["clock_max_callbacks"]) is not int
+                                       or not 1<=rt["clock_max_callbacks"]<=100000):
         raise ValueError("invalid clock_max_callbacks")
-    if type(rt["idle_sleep_ms"]) is not int or not 0<=rt["idle_sleep_ms"]<=1000:
+    if "idle_sleep_ms" in rt and (type(rt["idle_sleep_ms"]) is not int
+                                 or not 0<=rt["idle_sleep_ms"]<=1000):
         raise ValueError("invalid idle_sleep_ms")
     Limits(**cfg["io"])
     rnd=cfg["render"]
@@ -178,7 +180,8 @@ def _validate_config(cfg):
 def settings():
     return deepcopy(_cache_for_root(str(config_dir().resolve())))
 
-def color_registry():
+@lru_cache(maxsize=8)
+def _validated_color_registry(root):
     from .theme import normalize_color,BASE_ROLES,DERIVED_ROLES
     data=_registry("colors","palettes",default_colors())
     valid={}
@@ -191,7 +194,11 @@ def color_registry():
         valid[name]={k:normalize_color(v) for k,v in colors.items()}
     return valid
 
-def text_registry():
+def color_registry():
+    return _validated_color_registry(str(config_dir().resolve()))
+
+@lru_cache(maxsize=8)
+def _validated_text_registry(root):
     from .typography import TextStyle
     data=_registry("typography","presets",default_typography())
     valid={}
@@ -202,7 +209,11 @@ def text_registry():
         valid[name]=TextStyle(**properties)
     return valid
 
-def option_registry():
+def text_registry():
+    return _validated_text_registry(str(config_dir().resolve()))
+
+@lru_cache(maxsize=8)
+def _validated_option_registry(root):
     from .adaptive import LayoutScale
     data=_registry("options","presets",default_options())
     valid={}
@@ -223,6 +234,9 @@ def option_registry():
                 raise ValueError("invalid runtime preset")
         valid[name]=deepcopy(value)
     return valid
+
+def option_registry():
+    return _validated_option_registry(str(config_dir().resolve()))
 
 def layout_scale():
     from .adaptive import LayoutScale
@@ -254,3 +268,29 @@ def validate_installation():
 
 def clear_cache():
     _cache_for_root.cache_clear()
+    _validated_color_registry.cache_clear()
+    _validated_text_registry.cache_clear()
+    _validated_option_registry.cache_clear()
+
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description="Manage persistent TGK presets and settings")
+    parser.add_argument("action",choices=("init","validate","show","paths"),nargs="?",
+                        default="show")
+    parser.add_argument("--json",action="store_true")
+    args=parser.parse_args(argv)
+    if args.action=="init":
+        result=init_config()
+        validate_installation()
+    elif args.action=="validate":result=validate_installation()
+    elif args.action=="paths":result={k:str(v) for k,v in paths().items()}
+    else:result={"settings":settings(),"defaults":validate_installation()}
+    if args.json:print(json.dumps(result,indent=2,sort_keys=True))
+    else:
+        for key,value in result.items():print(f"{key}: {value}")
+    return 0
+
+
+if __name__=="__main__":
+    raise SystemExit(main())
