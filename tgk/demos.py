@@ -59,6 +59,7 @@ class Laboratory(App):
         self.samples=[]
         self.levels=[]
         self.swatches=[]
+        self._syncing_rgb=False
         super().__init__(**kwargs)
 
     def add_button(self,container,title,callback,**kwargs):
@@ -279,8 +280,12 @@ class Laboratory(App):
             swatch.background_color=mix(self.theme["background"],self.theme["accent"],percent/100)
             swatch.text_color="#000000" if percent>=65 else self.theme["text"]
         self.color_input.text=self.theme["accent"]
-        for index,slider in enumerate(self.rgb_sliders):
-            slider.value=rgba_channels(self.theme["accent"])[index]
+        self._syncing_rgb=True
+        try:
+            for index,slider in enumerate(self.rgb_sliders):
+                slider.value=rgba_channels(self.theme["accent"])[index]
+        finally:
+            self._syncing_rgb=False
         self.announce("Active "+self.theme.name+" / "+self.theme["accent"])
 
     def pick(self,name):
@@ -298,7 +303,7 @@ class Laboratory(App):
         self._refresh_palette()
 
     def update_rgb(self):
-        if len(self.rgb_sliders)!=3 or not hasattr(self,"palette_name"):return
+        if self._syncing_rgb or len(self.rgb_sliders)!=3 or not hasattr(self,"palette_name"):return
         channels=[int(slider.value) for slider in self.rgb_sliders]
         value="#"+''.join(f"{v:02X}" for v in channels)
         self.set_theme(self.theme,accent=value)
