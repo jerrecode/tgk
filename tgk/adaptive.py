@@ -69,6 +69,20 @@ class ScreenMetrics:
     def aspect_ratio(self):return self.width_dp/self.height_dp
 
     @property
+    def safe_content_size_dp(self):
+        """Content dimensions after explicitly supplied additional insets.
+
+        Normal Android Activities already account for window decor. Missing
+        inset measurements therefore subtract nothing, rather than guessing.
+        """
+        top=0.0 if self.inset_top_dp is None else self.inset_top_dp
+        bottom=0.0 if self.inset_bottom_dp is None else self.inset_bottom_dp
+        return (self.width_dp,max(1.0,self.height_dp-top-bottom))
+
+    @property
+    def is_landscape(self):return self.orientation=="landscape"
+
+    @property
     def approx_window_px(self):
         return (round(self.width_dp*self.density),
                 round(self.height_dp*self.density))
@@ -144,19 +158,30 @@ class LayoutScale:
         return {"compact":self.compact_margin_dp,"medium":self.medium_margin_dp,
                 "expanded":self.expanded_margin_dp}[self.size_class(metrics)]
 
+    def available_width(self,metrics):
+        """Positive content width after the configured cap and margins."""
+        return max(1.0,min(metrics.width_dp,self.max_content_width_dp)-2*self.margin(metrics))
+
     def gutter(self,metrics):
         """Keep grid gaps bounded on narrow portrait viewports."""
-        usable=max(1.0,min(metrics.width_dp,self.max_content_width_dp)-2*self.margin(metrics))
+        usable=self.available_width(metrics)
         if self.columns==1:return 0.0
         return min(float(self.medium_spacing_dp),
                    usable*0.35/(self.columns-1))
 
-    def column_width(self,metrics,gutter_dp=None):
-        gutter=self.gutter(metrics) if gutter_dp is None else gutter_dp
+    def column_width(self,metrics,gutter_dp=None,columns=None):
+        """Measure columns with bounded default gaps for their effective count."""
+        count=self.columns if columns is None else columns
+        if type(count) is not int or not 1<=count<=32:
+            raise ValueError("columns must be within 1..32")
+        usable=self.available_width(metrics)
+        if gutter_dp is None:
+            gutter=(0.0 if count==1 else min(float(self.medium_spacing_dp),
+                                            usable*0.35/(count-1)))
+        else:gutter=gutter_dp
         if isinstance(gutter,bool) or not isinstance(gutter,(int,float)) or not math.isfinite(gutter) or gutter<0:
             raise ValueError("gutter must be finite and nonnegative")
-        usable=max(1.0,min(metrics.width_dp,self.max_content_width_dp)-2*self.margin(metrics))
-        return max(1.0,(usable-(self.columns-1)*gutter)/self.columns)
+        return max(1.0,(usable-(count-1)*gutter)/count)
 
     def dp(self,size):
         """Round a dimension to the 4-dp spacing grid, not physical pixels."""

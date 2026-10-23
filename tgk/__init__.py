@@ -1,5 +1,5 @@
 """TGK public API; lazy imports keep the global site hook inexpensive."""
-__version__ = '0.6.9'
+__version__ = '0.6.10'
 _EXPORTS={
     'App','Widget','BoxLayout','GridLayout','ResponsiveGrid','FloatLayout','ScrollView',
     'Label','Button','TextInput','CheckBox','Switch','ProgressBar','Clock',

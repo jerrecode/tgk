@@ -198,7 +198,10 @@ def load_theme(path):
     if not isinstance(data,dict):raise ValueError("theme JSON must be an object")
     if set(data)-{"theme","colors","name"}:raise ValueError("unsupported theme file keys")
     base=data.get("theme",data.get("name",DEFAULT_NAME))
-    return resolve_theme(base,data.get("colors",{}))
+    colors=data.get("colors",{})
+    if not isinstance(base,str):raise ValueError("theme name must be a string")
+    if not isinstance(colors,dict):raise ValueError("theme colors must be an object")
+    return resolve_theme(base,colors)
 
 _active_theme=ContextVar("tgk_theme",default=None)
 

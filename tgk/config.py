@@ -185,6 +185,15 @@ def load_config(path=None):
     # symlink into its legitimate target and defeat the safety check.
     specified=deepcopy(_load_cached(str(path.absolute()),info.st_mtime_ns,info.st_size,
                                      info.st_ctime_ns,info.st_ino,info.st_dev))
+    return _effective_config(specified)
+
+
+def _effective_config(specified):
+    """Resolve profile inheritance and pinned values without filesystem writes.
+
+    Used by reads and BEFORE publication so cross-field constraints validate
+    the same effective settings that a subsequent process will actually use.
+    """
     name=specified["ui"]["option_profile"]
     # User-selectable option profiles are applied before explicit overrides.
     # Old installers wrote ALL built-in keys, so treat unchanged built-in
@@ -298,7 +307,7 @@ def patch_config(changes, *, reset=(), lock_timeout=5.0):
         validate_config(merged)
         # Validate selected preset before writing; a syntactically valid name
         # without an installed profile must not poison the active config file.
-        option_config(merged["ui"]["option_profile"])
+        _effective_config(merged)
         from .theme import PRESETS as THEMES,load_theme
         theme_name=merged["ui"]["theme"]
         theme_file=config_home()/"palettes"/(theme_name+".json")
@@ -308,9 +317,7 @@ def patch_config(changes, *, reset=(), lock_timeout=5.0):
         text_name=merged["ui"]["text_style"]
         text_file=config_home()/"text_styles"/(text_name+".json")
         if text_file.is_file():
-            style_obj=_read_json(text_file)
-            if set(style_obj)-{"style","properties"} or not isinstance(style_obj.get("properties"),dict):
-                raise ValueError("invalid TGK text style preset")
+            _text_style_from_file(text_file,text_name)
         elif text_name not in TEXT_PRESETS:raise ValueError("unknown text style "+text_name)
         payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
         if len(payload)>MAX_JSON_BYTES:raise ValueError("config would exceed size limit")
@@ -356,7 +363,8 @@ def option_config(name):
     path=config_home()/"options"/(name+".json")
     if path.is_file():
         data=_read_json(path)
-        if data.get("name")!=name or set(data)-{"name","settings"}:
+        if (data.get("name")!=name or set(data)-{"name","settings"}
+                or not isinstance(data.get("settings"),dict)):
             raise ValueError("invalid named option profile")
         override=data["settings"]
     elif name in OPTIONS:override=OPTIONS[name]
@@ -430,10 +438,18 @@ def configured_text_style():
     preset=config_home()/"text_styles"/(name+".json")
     from .typography import resolve_text_style
     if not preset.is_file():return resolve_text_style(name)
-    entry=_read_json(preset)
+    return _text_style_from_file(preset,name)
+
+
+def _text_style_from_file(path,name):
+    """One validation contract for transactions, runtime reads and audits."""
+    from .typography import resolve_text_style
+    entry=_read_json(path)
     if set(entry)-{"style","properties"} or not isinstance(entry.get("properties"),dict):
-        raise ValueError("invalid TGK text style file "+str(preset))
-    return resolve_text_style(entry.get("style",name),**entry["properties"])
+        raise ValueError("invalid TGK text style file "+str(path))
+    try:return resolve_text_style(entry.get("style",name),**entry["properties"])
+    except TypeError as exc:
+        raise ValueError("invalid TGK text style properties in "+str(path)) from exc
 
 
 def configured_layout_scale():
@@ -476,7 +492,13 @@ def audit_presets(root=None,*,max_files=2000,require_builtins=False):
         if not directory.exists():
             files=[]
         else:
-            files=sorted(p for p in directory.iterdir() if p.suffix==".json")
+            files=[]
+            for filename in directory.iterdir():
+                if filename.suffix!=".json":continue
+                if inspected+len(files)>=max_files:
+                    raise ValueError("too many preset files to audit")
+                files.append(filename)
+            files.sort()
         inspected+=len(files)
         if inspected>max_files:raise ValueError("too many preset files to audit")
         found=set()
@@ -488,13 +510,11 @@ def audit_presets(root=None,*,max_files=2000,require_builtins=False):
             if folder=="palettes":
                 load_theme(filename) # validated and <=MAX_JSON_BYTES
             elif folder=="text_styles":
-                entry=_read_json(filename)
-                if set(entry)-{"style","properties"} or not isinstance(entry.get("properties"),dict):
-                    raise ValueError("invalid typography preset: "+str(filename))
-                resolve_text_style(entry.get("style",name),**entry["properties"])
+                _text_style_from_file(filename,name)
             else:
                 entry=_read_json(filename)
-                if entry.get("name")!=name or set(entry)-{"name","settings"}:
+                if (entry.get("name")!=name or set(entry)-{"name","settings"}
+                        or not isinstance(entry.get("settings"),dict)):
                     raise ValueError("invalid option preset: "+str(filename))
                 validate_config(entry["settings"])
         counts[folder]=len(found)
