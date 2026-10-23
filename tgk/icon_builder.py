@@ -157,6 +157,8 @@ def recipe_names(*,include_existing=True):
     """Stable set of programmable icons; no aliases are expanded recursively."""
     from .icons import ICONS
     keys=set(_RECIPES)
+    from .semantic_icons import SEMANTIC_ICONS
+    keys.update(SEMANTIC_ICONS)
     if include_existing:keys.update(ICONS)
     return tuple(sorted(keys))
 
@@ -164,6 +166,9 @@ def recipe_names(*,include_existing=True):
 def recipe_for(name):
     if not isinstance(name,str) or not _NAME.fullmatch(name):
         raise ValueError("invalid icon name")
+    from .semantic_icons import SEMANTIC_ICONS
+    if name in SEMANTIC_ICONS:
+        return Recipe(name, None)  # independently drawn, no inherited action badge
     if name in _RECIPES:return _RECIPES[name]
     from .icons import CATEGORIES
     for group,names in CATEGORIES.items():
@@ -227,6 +232,10 @@ def render_svg(name,*,size=64,stroke="#D5EFFF",fill="#152A48",
     stroke=normalize_color(stroke)
     fill=normalize_color(fill)
     accent=normalize_color(accent)
+    from .semantic_icons import SEMANTIC_ICONS, render_semantic_svg
+    if name in SEMANTIC_ICONS:
+        return render_semantic_svg(name,size=size,stroke=stroke,
+                                   accent=accent,background=background)
     base,layers=_resolve_layers(name)
     pieces=[
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" '
@@ -333,7 +342,9 @@ def build_assets(output_root,*,names=None,raster=None,overwrite=False,
     try:
         for dirname in ("svg","ico","low_res","mid_res","high_res"):
             (stage/dirname).mkdir()
+        from .semantic_icons import ICON_GEOMETRY_REVISION
         manifest={"schema_version":1,"source":"tgk.icon_builder",
+                  "geometry_revision":ICON_GEOMETRY_REVISION,
                   "icons":{},"files":{},"raster":raster,
                   "sizes":{"low":low,"mid":mid,"high":high}}
         for name,vector in vector_sources.items():
