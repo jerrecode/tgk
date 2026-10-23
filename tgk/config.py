@@ -185,7 +185,7 @@ def update_config(section,key,value):
     _merge(merged,stored)
     merged[section][key]=value
     validate_config(merged)
-    payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\\n").encode("utf-8")
+    payload=(json.dumps(merged,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
     if len(payload)>MAX_JSON_BYTES:raise ValueError("config would exceed size limit")
     import tempfile
     fd,temporary=tempfile.mkstemp(prefix=".tgk-config-",suffix=".tmp",dir=directory)
