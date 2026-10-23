@@ -7,7 +7,7 @@ import argparse
 
 from tgk import (App,BoxLayout,ScrollView,ResponsiveGrid,Button,Label,
                  RichTable,Slider,ProgressBar,resolve_theme,PRESETS,
-                 TextInput,ScreenMetrics)
+                 TextInput,ScreenMetrics,LayoutScale)
 from tgk.style_tokens import TableStyle
 
 
@@ -106,8 +106,13 @@ def main():
     parser.add_argument("--theme",choices=tuple(PRESETS),default="midnight")
     parser.add_argument("--orientation",choices=("system","portrait","landscape"),
                         default="system")
+    parser.add_argument("--touch-target-dp",type=int,default=48)
+    parser.add_argument("--grid-unit-dp",type=int,default=4)
     args=parser.parse_args()
-    AdaptiveLab(theme=args.theme,orientation_mode=args.orientation).run()
+    scale=LayoutScale(touch_target_dp=args.touch_target_dp,
+                      grid_unit_dp=args.grid_unit_dp)
+    AdaptiveLab(theme=args.theme,orientation_mode=args.orientation,
+                layout_scale=scale).run()
 
 
 if __name__=="__main__":main()
