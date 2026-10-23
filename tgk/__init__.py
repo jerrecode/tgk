@@ -1,5 +1,5 @@
 """TGK public API; lazy imports keep the global site hook inexpensive."""
-__version__ = '0.4.0'
+__version__ = '0.5.0'
 _EXPORTS={
     'App','Widget','BoxLayout','GridLayout','ResponsiveGrid','FloatLayout','ScrollView',
     'Label','Button','TextInput','CheckBox','Switch','ProgressBar','Clock',
@@ -54,6 +54,12 @@ def __getattr__(name):
                 'resolve_component_style','table_html'):
         from importlib import import_module
         result=getattr(import_module('.style_tokens',__name__),name)
+        globals()[name]=result
+        return result
+    if name in ('Layer','Recipe','EXTENSIONS','SPECIAL_FILES','recipe_names',
+                'recipe_for','render_svg','asset_key_for_path','build_assets'):
+        from importlib import import_module
+        result=getattr(import_module('.icon_builder',__name__),name)
         globals()[name]=result
         return result
     if name=='Builder':

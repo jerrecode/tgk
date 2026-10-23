@@ -154,7 +154,10 @@ def glyph(name,default="file"):
         return ICONS[default]
     return ICONS[name]
 
-def icon_for_path(path,is_dir=None):
+def icon_for_path(path,is_dir=None,*,detailed=False):
+    if detailed:
+        from .icon_builder import asset_key_for_path
+        return asset_key_for_path(path,is_dir=is_dir)
     p=Path(path)
     if is_dir is None:is_dir=p.is_dir()
     name=p.name.casefold()
@@ -203,7 +206,12 @@ def svg(name,size=24,color="#FFFFFF",stroke=2):
     key={"folder_open":"folder","file_text":"file","image":"file","video":"file",
          "audio":"file","previous":"back","next":"forward","cancel":"close",
          "confirm":"check","zoom_reset":"search"}.get(name,name)
-    if key not in _VECTORS:raise KeyError("vector not available: "+name)
+    if key not in _VECTORS:
+        from .icon_builder import render_svg
+        try:
+            return render_svg(name,size=size,stroke=fill)
+        except (KeyError,ValueError) as exc:
+            raise KeyError("vector not available: "+name) from exc
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
             f'width="{size}" height="{size}" fill="none" stroke="{fill}" '
             f'stroke-width="{stroke:g}" stroke-linecap="round" stroke-linejoin="round">'

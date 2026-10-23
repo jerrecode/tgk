@@ -452,6 +452,66 @@ stale startup-colored region behind translucent or margin-offset children.
 Whether Android applies every Activity theme field immediately depends on the
 installed Termux:GUI plugin version; hardware validation is still required.
 
+## TGK 0.5.0: hierarchical composable SVG icon assets
+
+The existing Unicode/semantic icon catalog remains backward compatible.
+The new `tgk.icon_builder` defines reusable SVG base shapes (files,
+folders, data, media, actions), recursively inherited icon recipes and
+small foreground layers (text/code lines, stylus/pen, zipper, lock, audio
+note, terminal marker, play button, badge, and centered label). Individual
+recipes combine these primitives without duplicating hand-written SVGs.
+
+Code and data extensions include HTML, CSS, XML, JSON, YAML, TOML, Graph,
+DOT, HTMX, JavaScript, Java, Python/PYC/PYO, JSONL, MusicXML, LilyPond,
+C/H, TeX, BibTeX, Markdown/MDBook, AsciiDoc, ASCII, HEX, EEPROM, BIN,
+BYTE, MEM, DAT, DATA, GeoJSON, INFO, HELP, MAN, SH, BASH, BAT and more.
+Every `file_ext_*` recipe has an uppercase label centered inside the
+drawn file's inner bounds. Special recipes render README, LICENSE, INFO,
+AGENTS, MAKE, REQ and INSTALL in addition to the icon overlay, with more
+special filenames included in the public catalog.
+
+```python
+from tgk.icon_builder import render_svg,asset_key_for_path,build_assets
+print(asset_key_for_path("README.md"))  # filename_readme_md
+print(render_svg("file_ext_jsonl",size=64))
+build_assets("/tmp",names=["file_ext_py","file_ext_json","filename_readme_md"])
+# /tmp/icons/svg/*.svg, /tmp/icons/{ico,low_res,mid_res,high_res}/ empty
+```
+
+Asset generation uses a validation-first **atomic staging/rename** pipeline:
+no SVG is published until all selected recipes compile successfully. It
+creates exactly `icons/svg`, `icons/ico`, `icons/low_res`,
+`icons/mid_res`, and `icons/high_res` plus a manifest with SHA-256
+hashes, recipe ancestry and overlays. The four non-SVG directories remain
+empty on a pure SVG run. Generated assets are not duplicated in Git history;
+the empty output directories are tracked for discoverability.
+
+```sh
+# Standard library SVG-only export for all supported recipes.
+python -m tgk.icon_builder --output /tmp --overwrite
+
+# Generate all three PNG and JPEG resolutions plus multiresolution ICO.
+# CairoSVG and Pillow are optional, user-installed renderer dependencies.
+python -m pip install cairosvg pillow
+python -m tgk.icon_builder --output /tmp --raster --overwrite
+
+# Restrict a build to a small list of named assets.
+python -m tgk.icon_builder --output /tmp --overwrite \
+  --icon file_ext_html --icon filename_agents_md --icon folder_git
+```
+
+The raster presets default to low 32×32, mid 96×96, high 256×256 PNG/JPEG,
+plus a 16/24/32/48/64-pixel multi-size ICO. Rasterization performs bounded
+per-icon processing and never requires downloading icon fonts. SVG text
+uses system fonts, so its pixel-level appearance depends on the selected
+rendering backend; names and metadata are deterministic.
+
+A separate `Layered TGK icon asset pack` GitHub Actions workflow runs the
+whole raster conversion, verifies output counts, and uploads a downloadable
+ZIP under that run's artifacts. All SVG samples are XML-validated in unit
+tests. Android native image controls still need PNG/JPEG bytes rather than
+SVG source: use the generated raster assets or a trusted on-device renderer.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
