@@ -593,6 +593,44 @@ and cached by file modification metadata to avoid JSON parsing in the UI
 render hot path. Hardware maximum refresh rate, physical resolution and
 system inset dimensions remain unknown unless provided by Android APIs.
 
+## Exact persisted overrides and atomic batches (0.6.3)
+
+Reinstalling TGK still creates only missing files in
+`~/.config/tgk/{config.json,palettes/,text_styles/,options/}` (or your
+`TGK_CONFIG_HOME`) and **preserves user edits**. No preset or config is
+overwritten during reinstall.
+
+A `pinned` list records settings the user explicitly selected, even when
+the selected value matches the factory default. This prevents option
+profiles from unexpectedly overriding an explicit choice.
+
+```sh
+python -m tgk.config init
+python -m tgk.config set ui theme '"ocean"'
+python -m tgk.config set ui option_profile '"battery_saver"'
+python -m tgk.config set io workers 2
+python -m tgk.config reset io workers
+python -m tgk.config show
+```
+
+```python
+from tgk.config import update_config,update_settings
+update_settings({"ui":{"theme":"ocean","text_style":"title_h2"},
+                 "layout":{"touch_target_dp":64},
+                 "io":{"workers":2}})
+update_config("io","workers",None,reset=True)
+```
+
+The precedence is explicit per-instance/CLI arguments, then pinned
+persistent fields, then the selected option profile, then factory defaults.
+Existing older config files remain readable: any persisted value that
+differs from the factory default is automatically treated as an override.
+
+Settings changes are fully validated before a sibling temporary file is
+fsynced and atomically renamed into place. Batch changes either all succeed
+or leave the previous file intact. Invalid profile names, corrupt JSON,
+unknown fields and symlink destinations are refused.
+
 ## Configured option profiles and resource-bound defaults (0.6.1)
 
 Set `ui.option_profile` in `~/.config/tgk/config.json` to one of
