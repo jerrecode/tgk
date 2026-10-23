@@ -56,6 +56,12 @@ def __getattr__(name):
         result=getattr(import_module('.style_tokens',__name__),name)
         globals()[name]=result
         return result
+    if name in ('Layer','Recipe','EXTENSIONS','SPECIAL_FILES','recipe_names',
+                'recipe_for','render_svg','asset_key_for_path','build_assets'):
+        from importlib import import_module
+        result=getattr(import_module('.icon_builder',__name__),name)
+        globals()[name]=result
+        return result
     if name=='Builder':
         from .kv import Builder
         globals()[name]=Builder
