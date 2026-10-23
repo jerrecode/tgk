@@ -103,6 +103,31 @@ class AtomicConfigTests(unittest.TestCase):
             self.assertEqual(config.main(["reset","layout","touch_target_dp"]),0)
         self.assertEqual(json.loads(printed.getvalue())["layout"]["touch_target_dp"],48)
 
+    def test_multi_setting_update_is_one_validated_transaction(self):
+        result=config.update_settings({
+            "ui":{"theme":"forest","option_profile":"performance"},
+            "layout":{"touch_target_dp":64},
+            "io":{"workers":2},
+        })
+        self.assertEqual(result["ui"]["theme"],"forest")
+        self.assertEqual(result["io"]["workers"],2)
+        self.assertEqual(result["layout"]["touch_target_dp"],64)
+        pins=set(self.raw()["pinned"])
+        self.assertTrue({"ui.theme","ui.option_profile",
+                         "layout.touch_target_dp","io.workers"}<=pins)
+        before=(self.root/"config.json").read_bytes()
+        with self.assertRaises(ValueError):
+            config.update_settings({"io":{"workers":3},"layout":{"columns":0}})
+        self.assertEqual((self.root/"config.json").read_bytes(),before)
+        config.update_settings({},reset=(("layout","touch_target_dp"),))
+        self.assertEqual(config.load_config()["layout"]["touch_target_dp"],48)
+
+    def test_invalid_option_profile_rejected_before_replacement(self):
+        before=(self.root/"config.json").read_bytes()
+        with self.assertRaises(ValueError):
+            config.update_settings({"ui":{"option_profile":"nonexistent"}})
+        self.assertEqual((self.root/"config.json").read_bytes(),before)
+
     def test_cache_clear_reloads_external_change(self):
         config.load_config()
         disk=self.raw()
