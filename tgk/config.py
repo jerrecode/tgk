@@ -168,7 +168,7 @@ def validate_config(value):
 
 
 @lru_cache(maxsize=32)
-def _load_cached(path,mtime_ns,size):
+def _load_cached(path,mtime_ns,size,ctime_ns,inode,device):
     try:return validate_config(_read_json(path))
     except (json.JSONDecodeError,UnicodeDecodeError) as exc:
         raise ValueError(f"invalid TGK configuration {path}: {exc}") from exc
@@ -183,7 +183,8 @@ def load_config(path=None):
     if not path.is_file():raise ValueError("TGK config path is not a file")
     # Never resolve() a path before a no-follow read: that would turn a
     # symlink into its legitimate target and defeat the safety check.
-    specified=deepcopy(_load_cached(str(path.absolute()),info.st_mtime_ns,info.st_size))
+    specified=deepcopy(_load_cached(str(path.absolute()),info.st_mtime_ns,info.st_size,
+                                     info.st_ctime_ns,info.st_ino,info.st_dev))
     name=specified["ui"]["option_profile"]
     # User-selectable option profiles are applied before explicit overrides.
     # Old installers wrote ALL built-in keys, so treat unchanged built-in
