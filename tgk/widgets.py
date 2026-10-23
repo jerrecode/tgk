@@ -973,9 +973,12 @@ class App(EventDispatcher):
         self.theme=resolve_theme(theme or self.theme,colors)
         if self._backend is not None:self._backend.apply_theme(self.theme)
         return self.theme
-    def set_text_style(self,style='body',**overrides):
+    def set_text_style(self,style=None,**overrides):
         from .typography import resolve_text_style
-        self.text_style=resolve_text_style(style,**overrides)
+        # An omitted style means the current instance style, never the
+        # hard-coded "body" preset. Instance arguments still take priority.
+        self.text_style=resolve_text_style(self.text_style if style is None else style,
+                                          **overrides)
         if self._backend:self._backend.apply_text_style(self.text_style)
         return self.text_style
     @classmethod
