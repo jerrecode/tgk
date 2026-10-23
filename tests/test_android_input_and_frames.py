@@ -91,6 +91,19 @@ class InputFrameTests(unittest.TestCase):
         self.assertEqual(gallery.manager.current,'catalog')
         self.assertIs(root.children[0],gallery.manager)
 
+    def test_gallery_theme_changes_update_every_embedded_lab(self):
+        from tgk.demos import Gallery
+        gallery=Gallery(scenarios=['12_studio','13_workbench'])
+        gallery.build()
+        studio=gallery.labs['12_studio']
+        gallery.set_theme('ocean')
+        self.assertEqual(gallery.theme.name,'ocean')
+        self.assertIs(studio.theme,gallery.theme)
+        studio.set_theme('forest')
+        self.assertEqual(gallery.theme.name,'forest')
+        self.assertIs(studio.theme,gallery.theme)
+        self.assertIs(gallery.labs['13_workbench'].theme,gallery.theme)
+
     def test_explicit_popup_size_not_overridden_by_frame_fill(self):
         backend=TermuxBackend(tg=FakeTG)
         backend.activity=FakeTG.Activity(None)
