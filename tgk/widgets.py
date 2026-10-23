@@ -107,7 +107,9 @@ class Widget(EventDispatcher):
         n=self._native
         if n is None: return
         if name=='text' and hasattr(n,'settext'): n.settext(str(value))
-        if name=='font_size' and hasattr(n,'settextsize'): n.settextsize(int(value))
+        if name=='font_size' and hasattr(n,'settextsize'):
+            n.settextsize(int(value))
+            self._applied_native_style['font_size']=int(value)
         if name=='active' and hasattr(n,'setchecked'): n.setchecked(bool(value))
         if name=='source' and isinstance(self,Image) and hasattr(n,'setimage'):
             n.setimage(self._read_image())
@@ -343,7 +345,8 @@ class TermuxBackend:
                 legacy=getattr(node,'font_size',None)
                 size=legacy if legacy not in (None,16) and 'size' not in options and not hasattr(node,'text_style') else style.size
                 self._cached_set(node,'font_size','settextsize',int(size))
-            color=getattr(node,'text_color',selected[style.role])
+            default_role='button_text' if isinstance(node,Button) and not hasattr(node,'font_color_role') else style.role
+            color=getattr(node,'text_color',selected[default_role])
             self._cached_set(node,'foreground','settextcolor',tgui_color(color))
         return style
 
