@@ -196,6 +196,38 @@ def selected_layout_scale():
     return LayoutScale(**get_config()["layout"])
 
 
+def update_config(section,key,value):
+    """Validate and atomically persist one explicitly requested setting.
+
+    Does not touch any palette/typography/option preset file. Existing files
+    are preserved by reinitialization; this method is an explicit edit.
+    """
+    root=config_directory()
+    path=root/"config.json"
+    if path.is_symlink():raise ValueError("refusing to replace a symlink config")
+    current=get_config()
+    if section not in _DEFAULTS or section=="schema_version":
+        raise ValueError("unknown config section")
+    if key not in _DEFAULTS[section]:raise ValueError("unknown config parameter")
+    candidate={**current,section:{**current[section],key:value}}
+    checked=_validate(candidate)
+    root.mkdir(parents=True,exist_ok=True)
+    fd,tmp=tempfile.mkstemp(prefix=".tgk-config-",dir=root)
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as stream:
+            json.dump(checked,stream,sort_keys=True,indent=2,ensure_ascii=False)
+            stream.write("\n")
+            stream.flush();os.fsync(stream.fileno())
+        if path.is_symlink():raise ValueError("refusing to replace a symlink config")
+        os.replace(tmp,path)
+        try:os.chmod(path,0o600)
+        except OSError:pass
+    finally:
+        try:os.unlink(tmp)
+        except FileNotFoundError:pass
+    return checked
+
+
 def cli_main(argv=None):
     import argparse
     parser=argparse.ArgumentParser(prog="python -m tgk.config")
