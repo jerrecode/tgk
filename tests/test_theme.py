@@ -92,7 +92,6 @@ class ThemeTests(unittest.TestCase):
         button._theme_hook=backend.apply_theme
         button.background_color='#445566'
         self.assertEqual(button._native.backgrounds[-1],tgui_color('#445566'))
-        root.add_widget if False else None
 
     def test_live_theme_changes_keep_local_override(self):
         backend=TermuxBackend(tg=object(),theme='paper')
