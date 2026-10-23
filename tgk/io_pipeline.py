@@ -102,7 +102,7 @@ def copy_file(source, target, *, limits=None, cancelled=None, progress=None,
     if not target.parent.is_dir():raise FileNotFoundError(target.parent)
     fd,tmp=tempfile.mkstemp(prefix=".tgk-copy-",dir=target.parent)
     try:
-        with source.open("rb") as inp, os.fdopen(fd,"wb") as out:
+        with os.fdopen(fd,"wb") as out,source.open("rb") as inp:
             result=transfer(inp,out,limits=limits,cancelled=cancelled,progress=progress)
             out.flush();os.fsync(out.fileno())
         # recheck because another process might have created target meanwhile
@@ -149,7 +149,7 @@ def download(url,target,*,limits=None,allow_http=False,allow_hosts=None,
     if not target.parent.is_dir():raise FileNotFoundError(target.parent)
     fd,tmp=tempfile.mkstemp(prefix=".tgk-download-",dir=target.parent)
     try:
-        with opener.open(req,timeout=limits.timeout) as response,os.fdopen(fd,"wb") as out:
+        with os.fdopen(fd,"wb") as out,opener.open(req,timeout=limits.timeout) as response:
             result=transfer(response,out,limits=limits,cancelled=cancelled,
                             progress=progress)
             out.flush();os.fsync(out.fileno())
