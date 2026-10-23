@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from hashlib import sha256
 from html import escape
+from itertools import islice
 import json
 import math
 import os
@@ -310,17 +311,21 @@ def build_assets(output_root,*,names=None,raster=None,overwrite=False,
     if any(type(z) is not int or not 8<=z<=1024 for z in sizes):
         raise ValueError("invalid icon sizes")
     if sizes!=tuple(sorted(set(sizes))):raise ValueError("sizes must increase")
-    selection=tuple(sorted(set(names if names is not None else recipe_names())))
-    if not selection or len(selection)>max_icons:
+    # Bound consumption before sorting/deduplication: even an infinite stream
+    # of repeated valid names must not hang or grow memory without a limit.
+    requested=tuple(islice(names if names is not None else recipe_names(),max_icons+1))
+    if not requested or len(requested)>max_icons:
         raise ValueError("empty or oversized icon selection")
-    if any(not isinstance(n,str) or not _NAME.fullmatch(n) for n in selection):
+    if any(not isinstance(n,str) or not _NAME.fullmatch(n) for n in requested):
         raise ValueError("invalid icon name")
+    selection=tuple(sorted(set(requested)))
     # Validate every requested recipe and all combinations before publication.
     vector_sources={name:render_svg(name) for name in selection}
     root=Path(output_root).expanduser()
     if not root.is_dir():raise FileNotFoundError(root)
     target=root/"icons"
     if target.is_symlink():raise ValueError("refuse to overwrite symlink output")
+    if target.exists() and not target.is_dir():raise ValueError("icon output must be a directory")
     if target.exists() and not overwrite:raise FileExistsError(target)
     cairo,Image=_raster_backend() if raster else (None,None)
     stage=Path(tempfile.mkdtemp(prefix=".tgk-icons-stage-",dir=root))
@@ -329,7 +334,8 @@ def build_assets(output_root,*,names=None,raster=None,overwrite=False,
         for dirname in ("svg","ico","low_res","mid_res","high_res"):
             (stage/dirname).mkdir()
         manifest={"schema_version":1,"source":"tgk.icon_builder",
-                  "icons":{},"raster":raster,"sizes":{"low":low,"mid":mid,"high":high}}
+                  "icons":{},"files":{},"raster":raster,
+                  "sizes":{"low":low,"mid":mid,"high":high}}
         for name,vector in vector_sources.items():
             svg_data=vector.encode("utf-8")
             (stage/"svg"/(name+".svg")).write_bytes(svg_data)
@@ -339,24 +345,41 @@ def build_assets(output_root,*,names=None,raster=None,overwrite=False,
                                                  for z in recipe_for(name).layers]}
             if not raster:continue
             from io import BytesIO
-            renders={}
+            # Keep at most one raster surface live between resolutions.
+            icon=None
             for category,pixels in (("low_res",low),("mid_res",mid),("high_res",high)):
                 png=cairo.svg2png(bytestring=svg_data,output_width=pixels,
                                    output_height=pixels)
                 (stage/category/(name+".png")).write_bytes(png)
                 with Image.open(BytesIO(png)) as image:
-                    rgba=image.convert("RGBA")
-                    renders[category]=rgba.copy()
-                    rgb=Image.new("RGB",rgba.size,(248,250,254))
-                    rgb.paste(rgba,mask=rgba.getchannel("A"))
-                    rgb.save(stage/category/(name+".jpg"),"JPEG",quality=90,
-                             optimize=True,subsampling=0)
-            icon=renders["high_res"]
-            icon.save(stage/"ico"/(name+".ico"),format="ICO",
-                      sizes=[(16,16),(24,24),(32,32),(48,48),(64,64)])
+                    with image.convert("RGBA") as rgba:
+                        with Image.new("RGB",rgba.size,(248,250,254)) as rgb:
+                            with rgba.getchannel("A") as alpha:
+                                rgb.paste(rgba,mask=alpha)
+                            rgb.save(stage/category/(name+".jpg"),"JPEG",quality=90,
+                                     optimize=True,subsampling=0)
+                        if category=="high_res":icon=rgba.copy()
+            # Pillow drops requested ICO frames larger than the source.
+            # For valid high<16 settings the old fixed list emitted a corrupt
+            # six-byte header with zero frames. Always include a fitting frame.
+            edge=min(high,256)
+            ico_sizes=[(z,z) for z in (16,24,32,48,64) if z<=edge]
+            if not ico_sizes:ico_sizes=[(edge,edge)]
+            with icon:
+                icon.save(stage/"ico"/(name+".ico"),format="ICO",sizes=ico_sizes)
+        for path in sorted(stage.rglob("*")):
+            if path.is_file():
+                data=path.read_bytes()
+                manifest["files"][path.relative_to(stage).as_posix()]={
+                    "sha256":sha256(data).hexdigest(),"bytes":len(data)}
         (stage/"manifest.json").write_text(json.dumps(manifest,indent=2,
                                                 sort_keys=True)+"\n",encoding="utf-8")
+        # Recheck after potentially long raster generation. A competing
+        # create-only installer must not silently replace a published catalog.
+        if target.is_symlink():raise ValueError("refuse to overwrite symlink output")
         if target.exists():
+            if not overwrite:raise FileExistsError(target)
+            if not target.is_dir():raise ValueError("icon output must be a directory")
             backup=Path(tempfile.mkdtemp(prefix=".tgk-icons-backup-",dir=root))
             backup.rmdir()
             os.replace(target,backup)
@@ -379,7 +402,10 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description="Build layered SVG/PNG/JPG/ICO icons atomically")
     parser.add_argument("--output",default=".",help="parent directory for icons/")
     parser.add_argument("--icon",action="append",dest="names",help="select specific recipe names")
-    parser.add_argument("--raster",action="store_true",help="also export PNG/JPG/ICO (CairoSVG+Pillow)")
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument("--raster",dest="raster",action="store_true",help="also export PNG/JPG/ICO (CairoSVG+Pillow)")
+    mode.add_argument("--svg-only",dest="raster",action="store_false",help="override saved raster setting with SVG-only output")
+    parser.set_defaults(raster=None)
     parser.add_argument("--overwrite",action="store_true",help="replace existing icons/ atomically")
     parser.add_argument("--low",type=int,default=None)
     parser.add_argument("--mid",type=int,default=None)
