@@ -565,6 +565,26 @@ python -m tgk.config path       # active config file location
 python -m tgk.config validate   # strict bounds/types validation
 ```
 
+TGK 0.6.2 additionally supports atomic, validated updates without opening
+`config.json` in a text editor:
+
+```sh
+python -m tgk.config profiles
+python -m tgk.config set ui theme '"ocean"'
+python -m tgk.config set ui text_style '"title_h2"'
+python -m tgk.config set ui option_profile '"battery_saver"'
+python -m tgk.config set layout touch_target_dp 64
+python -m tgk.config get layout touch_target_dp
+```
+
+The `set` command accepts **JSON values**, so strings must be quoted as
+JSON strings. It validates the entire stored configuration and selected
+profile before committing a secure temporary file using atomic rename. It
+does not overwrite user-editable palette, text-style or option files.
+Invalid values leave the previous configuration unchanged; symlink config
+targets are refused. Writes by concurrent processes require an external
+lock if lost updates must also be prevented.
+
 `tgk.config.configured_io_limits()` returns validated limits for
 resource-bounded pipelines. Alternative presets are available through
 `tgk.config.option_config("battery_saver")`; they do not overwrite the
