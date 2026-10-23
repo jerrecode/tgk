@@ -203,6 +203,9 @@ def svg(name,size=24,color="#FFFFFF",stroke=2):
     if type(size) is not int or not 8<=size<=1024:raise ValueError("invalid icon size")
     if type(stroke) not in (int,float) or not .5<=stroke<=8:raise ValueError("invalid stroke")
     fill=normalize_color(color)
+    from .semantic_icons import SEMANTIC_ICONS, render_semantic_svg
+    if name in SEMANTIC_ICONS:
+        return render_semantic_svg(name,size=size,stroke=fill)
     key={"folder_open":"folder","file_text":"file","image":"file","video":"file",
          "audio":"file","previous":"back","next":"forward","cancel":"close",
          "confirm":"check","zoom_reset":"search"}.get(name,name)
