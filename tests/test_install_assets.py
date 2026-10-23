@@ -43,6 +43,58 @@ class InstallAssetTests(unittest.TestCase):
         self.assertEqual(marker.read_bytes(),b'<svg id="custom"/>')
         self.assertEqual(sorted(x.name for x in folder.iterdir()),["user_icon.svg"])
 
+    def test_upgrade_refreshes_only_untouched_legacy_generated_catalog(self):
+        initialize_icon_assets(self.root, settings=self.settings)
+        directory = self.root / "icons"
+        manifest_path = directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["geometry_revision"], 2)
+        # Simulate a verified v0.6.10 legacy catalog: same generated contents,
+        # but without semantic icon geometry revision information.
+        del manifest["geometry_revision"]
+        manifest_path.write_text(json.dumps(manifest))
+        result = initialize_icon_assets(self.root, settings=self.settings)
+        self.assertEqual(result["status"], "refreshed")
+        self.assertFalse(result["created"])
+        svg = (directory / "svg" / "play.svg").read_text()
+        self.assertIn("M8 4L20 12L8 20Z", svg)
+        self.assertNotIn("<text", svg)
+        self.assertEqual(initialize_icon_assets(
+            self.root, settings=self.settings)["status"], "preserved")
+
+    def test_upgrade_preserves_customized_or_extra_icon_files(self):
+        initialize_icon_assets(self.root, settings=self.settings)
+        directory = self.root / "icons"
+        manifest_path = directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        del manifest["geometry_revision"]
+        manifest_path.write_text(json.dumps(manifest))
+        icon = directory / "svg" / "play.svg"
+        icon.write_text("<svg id='my-custom-play-icon'/>")
+        result = initialize_icon_assets(self.root, settings=self.settings)
+        self.assertEqual(result["status"], "preserved")
+        self.assertEqual(icon.read_text(), "<svg id='my-custom-play-icon'/>")
+        # An extra user asset likewise prevents replacement.
+        icon.write_text("restored-placeholder")  # still customized
+        (directory / "svg" / "my_own.svg").write_text("<svg/>")
+        self.assertEqual(initialize_icon_assets(
+            self.root, settings=self.settings)["status"], "preserved")
+        self.assertTrue((directory / "svg" / "my_own.svg").exists())
+
+    def test_upgrade_does_not_follow_icon_symlinks(self):
+        initialize_icon_assets(self.root, settings=self.settings)
+        directory = self.root / "icons"
+        manifest_path = directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        del manifest["geometry_revision"]
+        manifest_path.write_text(json.dumps(manifest))
+        link = directory / "svg" / "play.svg"
+        link.unlink()
+        link.symlink_to(self.root / "external-asset")
+        self.assertEqual(initialize_icon_assets(
+            self.root, settings=self.settings)["status"], "preserved")
+        self.assertTrue(link.is_symlink())
+
     def test_symlinks_or_nondirectory_output_refused(self):
         dest=self.root/"icons"
         outside=self.root/"outside"
