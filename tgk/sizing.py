@@ -101,8 +101,7 @@ def resolve_size(spec, metrics, *, touch_target_dp=48, interactive=False,
         if w is not None and h is None:h=w/spec.aspect_ratio
         elif h is not None and w is None:w=h*spec.aspect_ratio
         elif w is not None and h is not None and spec.fit=="contain":
-            scale=min(w/h/spec.aspect_ratio,1.0)
-            if scale<1:w=h*spec.aspect_ratio
+            if w/h>spec.aspect_ratio:w=h*spec.aspect_ratio
             else:h=w/spec.aspect_ratio
 
     def constrain(value,available,minimum,maximum,fraction):
