@@ -821,6 +821,37 @@ configuration currently in use. A damaged inactive preset no longer stays
 undetected until a user selects it. Existing customizations are retained;
 audit failures do not reset or overwrite them.
 
+## Android hardware regression fixes: keyboard, frames and gallery
+
+Native text events from Termux:GUI `EditText` now update the model without
+immediately sending an identical `settext` back to Android. This avoids
+unnecessary caret repositioning, IME composition resets and lost keystrokes.
+Programmatic text changes, and explicit binding transformations such as
+uppercasing, can still update the native control.
+
+Screen, tab and ordinary FrameLayout page children fill their available
+native viewport if no explicit dimensions were given. NestedScrollView
+children fill the width but retain natural heights for scrolling. The
+offline regression tests cover native geometry, pre-existing popup
+dimensions and TextInput events; visual behavior still requires an Android
+device run.
+
+`python -m tgk.demos --gallery` opens one Activity containing all sixteen
+demo scenarios and a catalog. Selecting a scenario or using its Close
+button switches the current ScreenManager page *in the same Activity*.
+No intervening shell command waits for another Activity to finish. Pages
+are prebuilt in the native widget tree; this deliberately trades higher
+initial memory consumption for fast switches without unsupported native
+widget mutation. For smaller memory footprints use one demo, e.g.
+`python -m tgk.demos --demo 03_grid`.
+
+An Android overlay requires the app/Termux:GUI plugin to have working
+system-overlay capability. TGK normally raises a useful error when the
+plugin rejects `newActivity`. `App(window_mode='overlay',
+overlay_fallback=True)` explicitly permits using a **normal Activity**
+instead, and logs the downgrade; it does not silently claim to have
+created an overlay.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
