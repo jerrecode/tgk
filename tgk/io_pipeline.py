@@ -97,7 +97,7 @@ def copy_file(source, target, *, limits=None, cancelled=None, progress=None,
         raise ValueError("source and target must differ")
     if not source.is_file():raise FileNotFoundError(source)
     if target.exists() and not overwrite:
-        raise FileExistsError(target)
+        raise FileExistsError(f'destination already exists: {target}')
     if not target.parent.is_dir():raise FileNotFoundError(target.parent)
     fd,tmp=tempfile.mkstemp(prefix=".tgk-copy-",dir=target.parent)
     try:
@@ -105,7 +105,7 @@ def copy_file(source, target, *, limits=None, cancelled=None, progress=None,
             result=transfer(inp,out,limits=limits,cancelled=cancelled,progress=progress)
             out.flush();os.fsync(out.fileno())
         # recheck because another process might have created target meanwhile
-        if not overwrite and target.exists():raise FileExistsError(target)
+        if not overwrite and target.exists():raise FileExistsError(f'destination already exists: {target}')
         os.replace(tmp,target)
         return result
     finally:
@@ -152,7 +152,7 @@ def download(url,target,*,limits=None,allow_http=False,allow_hosts=None,
             result=transfer(response,out,limits=limits,cancelled=cancelled,
                             progress=progress)
             out.flush();os.fsync(out.fileno())
-        if not overwrite and target.exists():raise FileExistsError(target)
+        if not overwrite and target.exists():raise FileExistsError(f'destination already exists: {target}')
         os.replace(tmp,target)
         return result
     finally:
