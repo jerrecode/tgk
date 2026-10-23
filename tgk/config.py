@@ -59,6 +59,11 @@ def default_options():
                       "runtime":{"clock_max_callbacks":96,"idle_sleep_ms":10}},
         "performance":{"layout":dict(base),"runtime":{"clock_max_callbacks":64,
                                                       "idle_sleep_ms":8}},
+        "battery_saver":{"layout":dict(base),"runtime":{"clock_max_callbacks":48,
+                                                        "idle_sleep_ms":25}},
+        "large_screen":{"layout":dict(base,expanded_margin_dp=40,
+                                       max_content_width_dp=1600),
+                        "runtime":{"clock_max_callbacks":128,"idle_sleep_ms":10}},
     }
 
 def default_colors():
