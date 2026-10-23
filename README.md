@@ -541,10 +541,13 @@ reinstalling does not overwrite your manual edits.
 (resolution tiers and maximum pack size). All are initialized with
 working factory defaults. The per-preset files are human-editable JSON.
 Palette files may override individual semantic roles, while typography files
-override validated font/style parameters. The `options/` files are editable
-templates of component styling; `config.json` remains the **live source
-of system/default settings**, so editing a component options template
-does not by itself change all UI widgets.
+override validated font/style parameters. Edited `options/button.json`,
+`options/table.json` and similar component presets are resolved on use by
+`resolve_component_style(name)`; explicitly passed `ComponentStyle` values
+take precedence. `config.json` is the **live source of system-level
+settings** such as responsive layout, backend scheduling, bounded I/O defaults
+and icon export sizes; editing one component preset does not automatically
+override every widget in a running Activity.
 
 ```sh
 python -m tgk.config init   # safely recreate missing catalog entries
