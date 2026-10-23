@@ -562,7 +562,26 @@ changes or create a new App.
 python -m tgk.config init       # create missing files; preserve edits
 python -m tgk.config show       # resolved, validated settings
 python -m tgk.config path       # active config file location
-python -m tgk.config validate   # strict bounds/types validation
+python -m tgk.config validate
+
+For atomically changing several persistent defaults at once:
+
+```python
+from tgk.config import patch_config, update_config
+patch_config({"ui":{"theme":"ocean","text_style":"title_h2",
+                     "option_profile":"battery_saver"},
+              "layout":{"touch_target_dp":56}})
+update_config("io","workers",2)
+```
+
+`patch_config` validates the complete merged configuration, selected
+preset names and resource limits before writing a temporary sibling file
+and atomically replacing `config.json`. On invalid input the old file is
+retained. Neither command overwrites palette, typography or option preset
+files. Explicit instance arguments and shell flags retain precedence.
+`build_assets(...)` uses the saved `icons.raster` preference when its
+`raster` argument is omitted, while `raster=False` keeps an SVG-only build.
+   # strict bounds/types validation
 ```
 
 TGK 0.6.2 additionally supports atomic, validated updates without opening

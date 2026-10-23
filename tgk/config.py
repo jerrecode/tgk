@@ -160,19 +160,25 @@ def clear_config_cache():
     _load_cached.cache_clear()
 
 
-def update_config(section,key,value):
-    """Atomically replace one validated config field; keep all other fields.
+def patch_config(changes):
+    """Atomically replace multiple validated config fields in one transaction.
 
     The existing file is never replaced if validation or serialization fails.
     No user preset file is overwritten. For concurrent writers use one process
     or an external lock; this method prevents torn writes, not lost updates.
     """
-    _safe_name(section)
-    _safe_name(key)
-    if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
-        raise ValueError("unknown TGK config section: "+section)
-    if key not in DEFAULT_CONFIG[section]:
-        raise ValueError("unknown TGK config field: "+section+"."+key)
+    if not isinstance(changes,dict) or not changes:
+        raise ValueError("configuration patch must be a nonempty object")
+    for section,fields in changes.items():
+        _safe_name(section)
+        if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
+            raise ValueError("unknown TGK config section: "+section)
+        if not isinstance(fields,dict) or not fields:
+            raise ValueError("configuration section must contain updated fields")
+        for key in fields:
+            _safe_name(key)
+            if key not in DEFAULT_CONFIG[section]:
+                raise ValueError("unknown TGK config field: "+section+"."+key)
     directory=config_home()
     path=config_path()
     if directory.is_symlink() or path.is_symlink():
@@ -183,7 +189,7 @@ def update_config(section,key,value):
     stored=_read_json(path)
     merged=deepcopy(DEFAULT_CONFIG)
     _merge(merged,stored)
-    merged[section][key]=value
+    _merge(merged,changes)
     validate_config(merged)
     # Validate selected preset before writing; a syntactically valid name
     # without an installed profile must not poison the active config file.
@@ -224,6 +230,13 @@ def update_config(section,key,value):
         Path(temporary).unlink(missing_ok=True)
     clear_config_cache()
     return load_config()
+
+
+def update_config(section,key,value):
+    """Atomically update one named field; preserves unrelated saved fields."""
+    _safe_name(section)
+    _safe_name(key)
+    return patch_config({section:{key:value}})
 
 
 def option_config(name):
