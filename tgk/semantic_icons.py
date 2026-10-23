@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from html import escape
 
+# Bump when generated SVG geometry materially changes. Install upgrades only
+# untouched TGK-owned catalogs; user-customized catalogs remain intact.
+ICON_GEOMETRY_REVISION = 2
+
 # Individual line-art motifs. Deliberately distinct from file-extension recipes.
 _PATHS = {
     "select": "M4 12L9 17L20 6 M3 3H21V21H3Z",
