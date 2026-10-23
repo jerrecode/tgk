@@ -121,16 +121,28 @@ class LayoutScale:
     medium_margin_dp:int=24
     expanded_margin_dp:int=32
     max_content_width_dp:int=1200
+    compact_breakpoint_dp:int=600
+    expanded_breakpoint_dp:int=840
+    font_touch_scale_limit_pct:int=150
 
     def __post_init__(self):
         for name in self.__dataclass_fields__:
             val=getattr(self,name)
             if type(val) is not int or val<=0:raise ValueError(name+" must be positive integer")
         if self.columns>32:raise ValueError("columns must be <= 32")
+        if not 240<=self.compact_breakpoint_dp<self.expanded_breakpoint_dp<=3000:
+            raise ValueError("layout breakpoint order must be within 240..3000dp")
+        if not 100<=self.font_touch_scale_limit_pct<=250:
+            raise ValueError("font touch scale limit must be 100..250 percent")
+
+    def size_class(self,metrics):
+        if metrics.width_dp<self.compact_breakpoint_dp:return "compact"
+        if metrics.width_dp<self.expanded_breakpoint_dp:return "medium"
+        return "expanded"
 
     def margin(self,metrics):
         return {"compact":self.compact_margin_dp,"medium":self.medium_margin_dp,
-                "expanded":self.expanded_margin_dp}[metrics.size_class]
+                "expanded":self.expanded_margin_dp}[self.size_class(metrics)]
 
     def gutter(self,metrics):
         """Keep grid gaps bounded on narrow portrait viewports."""
@@ -151,12 +163,17 @@ class LayoutScale:
         if not math.isfinite(float(size)) or size<0:raise ValueError("invalid dimension")
         return round(size/self.grid_unit_dp)*self.grid_unit_dp
 
-    def touch_height(self,requested=None):
-        if requested is None:return self.touch_target_dp
-        return max(self.touch_target_dp,math.ceil(_positive(requested,"requested height")))
+    def touch_height(self,requested=None,metrics=None):
+        # Android font scale is authoritative; cap growth to the configured
+        # maximum so a single button never consumes most of the viewport.
+        factor=1.0 if metrics is None else min(
+            max(1.0,metrics.font_scale),self.font_touch_scale_limit_pct/100)
+        minimum=math.ceil(self.touch_target_dp*factor)
+        if requested is None:return minimum
+        return max(minimum,math.ceil(_positive(requested,"requested height")))
 
 
-def arrange_spans(children,columns=12,metrics=None,span_units=None):
+def arrange_spans(children,columns=12,metrics=None,span_units=None,size_class=None):
     """Deterministic first-fit packing with optional 12-unit logical spans.
 
     A grid with 6 physical columns can interpret old 12-unit spans:
@@ -169,6 +186,9 @@ def arrange_spans(children,columns=12,metrics=None,span_units=None):
     if type(span_units) is not int or not 1<=span_units<=32:
         raise ValueError("invalid span units")
     if metrics is None:metrics=ScreenMetrics(393,852)
+    if size_class is None:size_class=metrics.size_class
+    if size_class not in ("compact","medium","expanded"):
+        raise ValueError("size_class must be compact, medium or expanded")
     positions=[]
     row=0;col=0
     for widget in children:
@@ -176,7 +196,7 @@ def arrange_spans(children,columns=12,metrics=None,span_units=None):
         if requested is None:
             choices={"compact":"span_compact","medium":"span_medium",
                      "expanded":"span_expanded"}
-            requested=getattr(widget,choices[metrics.size_class],span_units)
+            requested=getattr(widget,choices[size_class],span_units)
         if type(requested) is not int or not 1<=requested<=span_units:
             raise ValueError("invalid responsive grid span")
         width=min(columns,(requested*columns+span_units-1)//span_units)
