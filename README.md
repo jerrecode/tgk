@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.6.8:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.6.9:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
 
 ## Install on Android/Termux
 
@@ -573,6 +573,47 @@ patch_config({
 This lock is specifically for TGK configuration writers using the TGK
 API. External programs that overwrite `config.json` without honoring the
 lock remain responsible for their own coordination.
+
+## Installer-managed icon catalog
+
+The TGK installer now creates the selected palette, text style and option
+presets in the normal config directory, validates *all* saved preset files,
+then generates the composable icon catalog if `icons/` does not exist:
+
+```text
+~/.config/tgk/
+  config.json
+  palettes/
+  text_styles/
+  options/
+  icons/
+    manifest.json
+    svg/           # SVG command recipes for the full icon catalog
+    ico/           # empty by default
+    low_res/       # empty by default (PNG/JPEG when enabled)
+    mid_res/
+    high_res/
+```
+
+This is **create-only**. Existing user icons, palettes and options are never
+silently replaced. Asset generation validates all recipe combinations before
+publication and atomically renames its temporary directory when successful.
+The icon dimensions, raster mode and total recipe cap come from the validated
+`config.json` `icons` section. The default mode is SVG-only, requiring no
+optional image packages. Enabling `icons.raster=true` requests PNG, JPEG and
+ICO files and requires CairoSVG and Pillow; missing dependencies fail clearly
+without publishing a partial catalog.
+
+```sh
+python -m tgk.install_assets --dry-run
+python -m tgk.install_assets                  # create if absent
+python -m tgk.icon_builder --output ~/.config/tgk --overwrite # explicit rebuild
+```
+
+Changing the icon sizes or raster setting does **not** overwrite an existing
+catalog on reinstall. Use the explicit builder command for regeneration after
+backing up custom assets. `TGK_CONFIG_HOME` can move the configuration and
+icon root together.
 
 ## Persistent TGK configuration (0.6.0)
 
