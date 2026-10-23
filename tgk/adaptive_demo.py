@@ -74,9 +74,8 @@ class AdaptiveLab(App):
         slider.bind(value=lambda _sender,v:self.update_progress(v,value,progress))
         body.add_widget(value);body.add_widget(slider);body.add_widget(progress)
         scroll.add_widget(body);root.add_widget(scroll)
-        close=Button(text="Close",height=54)
-        close.bind(on_release=lambda *_:self.stop())
-        root.add_widget(close)
+        from tgk.layout_helpers import compact_action_bar
+        root.add_widget(compact_action_bar("Close",self.stop,margin=12))
         return root
 
     def on_start(self):
