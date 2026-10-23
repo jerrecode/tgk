@@ -200,11 +200,14 @@ def load_theme(path):
 _active_theme=ContextVar("tgk_theme",default=None)
 
 def get_theme():
-    return _active_theme.get() or resolve_theme(DEFAULT_NAME)
+    selected=_active_theme.get()
+    if selected is not None:return selected
+    from .config import configured_theme
+    return configured_theme()
 
 def set_theme(theme=None,**overrides):
     """Set the active theme for future TGK applications in this context."""
-    selected=resolve_theme(theme or DEFAULT_NAME,overrides)
+    selected=resolve_theme(theme or get_theme(),overrides)
     _active_theme.set(selected)
     return selected
 
