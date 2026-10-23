@@ -101,8 +101,12 @@ class Widget(EventDispatcher):
             raise NotImplementedError('dynamic widget removal requires rebuilding the view')
         self.children.remove(widget);widget.parent=None
     def walk(self):
-        yield self
-        for w in self.children: yield from w.walk()
+        """Pre-order traversal without Python recursion or stack overflow."""
+        pending=[self]
+        while pending:
+            node=pending.pop()
+            yield node
+            pending.extend(reversed(node.children))
     def _update_native(self,name,value):
         n=self._native
         if n is None: return
