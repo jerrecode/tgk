@@ -179,6 +179,8 @@ class Spinner(Label):
         super().__init__(text=text,values=list(values),**kwargs)
 class ToggleButton(Button):
     def __init__(self,text='',state='normal',**kwargs):
+        from .layout_helpers import action_width
+        kwargs.setdefault('width',action_width(text or 'Toggle'))
         super().__init__(text=text,state=state,**kwargs)
 class ProgressBar(Widget):
     def __init__(self,value=0,max=100,**kwargs):super().__init__(value=value,max=max,**kwargs)
@@ -623,9 +625,10 @@ class TermuxBackend:
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
         if node.parent is None:
             # Fill the Activity content viewport instead of leaving a
-            # WRAP_CONTENT gap showing the old startup window color.
-            if not hasattr(node,'width'):native.setwidth(tg.View.MATCH_PARENT)
-            if not hasattr(node,'height'):native.setheight(tg.View.MATCH_PARENT)
+            # WRAP_CONTENT gap showing the old startup window color. The
+            # protocol accepts the literal constant even with simple mocks.
+            if not hasattr(node,'width'):native.setwidth('MATCH_PARENT')
+            if not hasattr(node,'height'):native.setheight('MATCH_PARENT')
         if isinstance(node.parent,BoxLayout):
             weight=getattr(node,'weight',None)
             if weight is not None and (isinstance(weight,bool) or not isinstance(weight,int) or weight<0):
