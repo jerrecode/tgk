@@ -673,6 +673,7 @@ class TermuxBackend:
         elif isinstance(node,ProgressBar):native=tg.ProgressBar(a,parent)
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
+        if interactive:self._refresh_touch_height(node)
         native_id=getattr(native,'id',None)
         if type(native_id) in (int,str):self._native_index[native_id]=node
         node._theme_hook=lambda changed,node=node: self.invalidate_style(node,changed)
@@ -699,8 +700,6 @@ class TermuxBackend:
         interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
         requested=getattr(node,'height',None)
         if requested is not None:native.setheight(int(math.ceil(requested)))
-        if interactive and getattr(node,'size_spec',None) is None:
-            self._refresh_touch_height(node)
         requested_width=getattr(node,'width',None)
         if interactive and requested_width is not None and not getattr(node,'allow_small_touch_target',False):
             minimum_width=component.min_touch_dp if component is not None else self.layout_scale.touch_target_dp
