@@ -6,14 +6,13 @@ Never pass user strings through a shell or open an unbounded stderr/stdout pipe.
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 from threading import Event, BoundedSemaphore
@@ -177,20 +176,49 @@ def ffprobe(path,*,binary="ffprobe",timeout=15.0,max_json_bytes=8*1024*1024):
         raise ValueError("invalid ffprobe output size")
     command=[binary,"-hide_banner","-v","error","-protocol_whitelist","file,pipe",
              "-show_format","-show_streams","-of","json","-i",str(path)]
-    with tempfile.TemporaryFile() as stdout,tempfile.TemporaryFile() as stderr:
-        proc=subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=stdout,
-                              stderr=stderr,close_fds=True)
-        try:exit_code=proc.wait(timeout=timeout)
+    # Drain both pipes concurrently so metadata never occupies uncapped
+    # memory OR disk and stderr cannot deadlock a blocked child process.
+    import selectors
+    proc=subprocess.Popen(command,stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                          close_fds=True)
+    limit=time.monotonic()+timeout
+    stdout=bytearray();stderr=bytearray()
+    selector=selectors.DefaultSelector()
+    try:
+        selector.register(proc.stdout,selectors.EVENT_READ,"stdout")
+        selector.register(proc.stderr,selectors.EVENT_READ,"stderr")
+        while selector.get_map():
+            remaining=limit-time.monotonic()
+            if remaining<=0:raise TimeoutError("ffprobe exceeded timeout")
+            for key,_ in selector.select(remaining):
+                block=os.read(key.fd,65536)
+                if not block:
+                    selector.unregister(key.fileobj)
+                elif key.data=="stdout":
+                    if len(stdout)+len(block)>max_json_bytes:
+                        raise ValueError("ffprobe JSON too large")
+                    stdout.extend(block)
+                elif len(stderr)<4096:
+                    stderr.extend(block[:4096-len(stderr)])
+        remaining=limit-time.monotonic()
+        if remaining<=0:raise TimeoutError("ffprobe exceeded timeout")
+        try:exit_code=proc.wait(timeout=remaining)
         except subprocess.TimeoutExpired as exc:
-            proc.kill();proc.wait()
             raise TimeoutError("ffprobe exceeded timeout") from exc
-        stdout.seek(0);raw=stdout.read(max_json_bytes+1)
-        if len(raw)>max_json_bytes:raise ValueError("ffprobe JSON too large")
-        stderr.seek(0);errors=stderr.read(4096).decode("utf-8","replace")
-        if exit_code:raise RuntimeError(f"ffprobe exited {exit_code}: {errors}")
-        data=json.loads(raw)
+        if exit_code:
+            raise RuntimeError(f"ffprobe exited {exit_code}: "+stderr.decode("utf-8","replace"))
+        data=json.loads(stdout)
         if not isinstance(data,dict):raise ValueError("ffprobe JSON must be an object")
         return data
+    except BaseException:
+        if proc.poll() is None:proc.kill()
+        proc.wait()
+        raise
+    finally:
+        selector.close()
+        proc.stdout.close()
+        proc.stderr.close()
 
 
 class BoundedPool:
