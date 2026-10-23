@@ -1,5 +1,5 @@
 """TGK public API; lazy imports keep the global site hook inexpensive."""
-__version__ = '0.6.1'
+__version__ = '0.6.2'
 _EXPORTS={
     'App','Widget','BoxLayout','GridLayout','ResponsiveGrid','FloatLayout','ScrollView',
     'Label','Button','TextInput','CheckBox','Switch','ProgressBar','Clock',
@@ -66,7 +66,7 @@ def __getattr__(name):
                 'initialize_config','load_config','validate_config',
                 'configured_theme','configured_text_style',
                 'configured_layout_scale','configured_io_limits',
-                'option_config'):
+                'option_config','update_config','update_settings','clear_config_cache'):
         from importlib import import_module
         result=getattr(import_module('.config',__name__),name)
         globals()[name]=result
