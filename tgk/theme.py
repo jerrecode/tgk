@@ -183,11 +183,13 @@ class Theme:
 def resolve_theme(theme=None, overrides=None):
     if isinstance(theme,Theme):base=theme
     else:
-        if theme is None:theme=DEFAULT_NAME
-        if theme not in PRESETS:
-            raise ValueError(f"unknown theme {theme!r}; use one of: {', '.join(PRESETS)}")
-        base=Theme(theme,{k:PRESETS[theme][k] for k in BASE_ROLES},
-                   pinned_roles=frozenset())
+        from .config import color_registry,settings
+        if theme is None:theme=settings()["defaults"]["palette"]
+        registry=color_registry()
+        if theme not in registry:
+            raise ValueError(f"unknown theme {theme!r}; use one of: {', '.join(registry)}")
+        colors=registry[theme]
+        base=Theme(theme,colors,pinned_roles=frozenset(set(colors)&set(DERIVED_ROLES)))
     return base.override(**overrides) if overrides else base
 
 def load_theme(path):
@@ -200,11 +202,12 @@ def load_theme(path):
 _active_theme=ContextVar("tgk_theme",default=None)
 
 def get_theme():
-    return _active_theme.get() or resolve_theme(DEFAULT_NAME)
+    selected=_active_theme.get()
+    return selected if selected is not None else resolve_theme()
 
 def set_theme(theme=None,**overrides):
     """Set the active theme for future TGK applications in this context."""
-    selected=resolve_theme(theme or DEFAULT_NAME,overrides)
+    selected=resolve_theme(theme,overrides)
     _active_theme.set(selected)
     return selected
 
