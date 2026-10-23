@@ -115,8 +115,11 @@ def get_text_style():
     if selected is not None:return selected
     from .config import configured_text_style
     return configured_text_style()
-def set_text_style(style="body",**overrides):
-    value=resolve_text_style(style,**overrides);_active.set(value);return value
+def set_text_style(style=None,**overrides):
+    """Retain configured/context typography unless an explicit style is supplied."""
+    value=resolve_text_style(get_text_style() if style is None else style,**overrides)
+    _active.set(value)
+    return value
 
 @dataclass(frozen=True)
 class TextSpan:

@@ -747,6 +747,19 @@ specified dimensions. Explicit maxima and the actual viewport always take
 precedence over requested sizes to avoid overflowing compact screens.
 `tgk size-plan` in matching TGK Tools previews the same policy offline.
 
+### Saved typography defaults and safe preset reinstallation
+
+The installer creates `config.json`, color palettes, typography styles and option
+profiles under `${TGK_CONFIG_HOME:-${XDG_CONFIG_HOME:-~/.config}/tgk}`
+without replacing existing regular files. Existing symlinks in preset targets
+are rejected rather than silently treated as user presets.
+
+`App()` and `set_text_style()` inherit the configured typography when
+no style was explicitly supplied. `App.set_text_style()` without arguments
+keeps the current instance's typography; use `App.set_text_style("body")`
+to deliberately reset to the body preset. Specifying an explicit style or
+per-widget override remains higher priority than saved global defaults.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.

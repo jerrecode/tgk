@@ -340,7 +340,12 @@ def _write_new(path,value):
     flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL
     if hasattr(os,"O_NOFOLLOW"):flags|=os.O_NOFOLLOW
     try:fd=os.open(path,flags,0o600)
-    except FileExistsError:return False
+    except FileExistsError:
+        # Create-only installation must not silently trust an existing
+        # symlink, directory or FIFO as a user preset.
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("TGK preset exists but is not a regular file: "+str(path))
+        return False
     try:
         with os.fdopen(fd,"wb") as out:
             out.write(data);out.flush();os.fsync(out.fileno())
