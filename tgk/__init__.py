@@ -62,6 +62,12 @@ def __getattr__(name):
         result=getattr(import_module('.icon_builder',__name__),name)
         globals()[name]=result
         return result
+    if name in ('SCHEMA_VERSION','config_directory','get_config','initialize_config',
+                'selected_theme','selected_text_style','selected_layout_scale'):
+        from importlib import import_module
+        result=getattr(import_module('.config',__name__),name)
+        globals()[name]=result
+        return result
     if name=='Builder':
         from .kv import Builder
         globals()[name]=Builder
