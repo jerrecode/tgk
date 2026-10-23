@@ -49,6 +49,7 @@ class NavigationTests(unittest.TestCase):
             FrameLayout=FakeTG._View
             TabLayout=FakeTG._View
             TextView=FakeTG._View
+            Button=FakeTG._View
         tg=TabTG()
         backend=TermuxBackend(tg=tg)
         backend.activity=tg.Activity(None)
