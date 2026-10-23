@@ -322,7 +322,10 @@ class TermuxBackend:
         self._stop_requested=False
         from .adaptive import LayoutScale
         self.screen_metrics=None
-        self.layout_scale=layout_scale or LayoutScale()
+        if layout_scale is None:
+            from .config import selected_layout_scale
+            layout_scale=selected_layout_scale()
+        self.layout_scale=layout_scale
         if not isinstance(self.layout_scale,LayoutScale):
             raise TypeError('layout_scale must be a LayoutScale')
         self.orientation_mode='system'
@@ -822,9 +825,12 @@ class TermuxBackend:
                         self.event(event)
                         if event.type=='destroy' and event.value.get('finishing',False):
                             running=False
-                    Clock.tick()
+                    from .config import get_config
+                    # Cached by config mtime; changes become active on the next loop.
+                    backend_options=get_config()['backend']
+                    Clock.tick(max_callbacks=backend_options['clock_callbacks_per_tick'])
                     if event is None and not self._stop_requested:
-                        time.sleep(0.01)
+                        time.sleep(backend_options['idle_sleep_seconds'])
             finally:
                 # Cancel callbacks associated with this Activity before closing
                 # native views, avoiding stale timer writes after app shutdown.
@@ -862,10 +868,13 @@ class App(EventDispatcher):
         from .typography import resolve_text_style,get_text_style
         selected=kwargs.pop('theme',None)
         typography=kwargs.pop('text_style',None)
-        self.window_mode=kwargs.pop('window_mode','normal')
-        self.orientation_mode=kwargs.pop('orientation_mode','system')
+        from .config import get_config,selected_layout_scale
+        configured=get_config()
+        self.window_mode=kwargs.pop('window_mode',configured['window']['mode'])
+        self.orientation_mode=kwargs.pop('orientation_mode',configured['window']['orientation'])
         from .adaptive import LayoutScale
-        self.layout_scale=kwargs.pop('layout_scale',None) or LayoutScale()
+        requested_layout=kwargs.pop('layout_scale',None)
+        self.layout_scale=requested_layout if requested_layout is not None else selected_layout_scale()
         if not isinstance(self.layout_scale,LayoutScale):
             raise TypeError('layout_scale must be a LayoutScale')
         if self.orientation_mode not in ('system','portrait','landscape'):
