@@ -612,6 +612,34 @@ and cached by file modification metadata to avoid JSON parsing in the UI
 render hot path. Hardware maximum refresh rate, physical resolution and
 system inset dimensions remain unknown unless provided by Android APIs.
 
+## TGK 0.6.4 — Exact overrides and resettable profile inheritance
+
+A setting changed with `update_config()`, `patch_config()` or the
+`set` command is recorded in `config.json:pinned`. An explicit override
+wins even when equal to its factory default; e.g. two I/O workers can stay
+selected under the `battery_saver` profile (which otherwise requests one).
+
+```sh
+python -m tgk.config set ui option_profile '"battery_saver"'
+python -m tgk.config set io workers 2
+python -m tgk.config reset io workers    # inherits 1 again
+```
+
+For all-or-nothing multi-field edits, use:
+
+```python
+from tgk.config import update_settings
+settings=update_settings({"layout":{"touch_target_dp":64},
+                          "runtime":{"clock_callbacks_per_tick":60}})
+update_settings({},reset=(("layout","touch_target_dp"),))
+```
+
+Old installations with no `pinned` field remain compatible: non-default
+stored values still override active profiles. The installed palette, typography
+and option JSON files are created if missing and preserved on reinstall.
+The transaction is atomic at the file level; simultaneous writers require
+a separate lock if lost updates must be prevented.
+
 ## Configured option profiles and resource-bound defaults (0.6.1)
 
 Set `ui.option_profile` in `~/.config/tgk/config.json` to one of
