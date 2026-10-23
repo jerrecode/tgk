@@ -461,6 +461,14 @@ class Gallery(App):
         outer.add_widget(manager)
         return outer
 
+    def set_theme(self,theme=None,**colors):
+        selected=super().set_theme(theme,**colors)
+        # Embedded Laboratory controls read self.theme to calculate live
+        # swatches, so update all models as well as the single Activity.
+        for lab in self.labs.values():
+            object.__setattr__(lab,'theme',selected)
+        return selected
+
     def on_start(self):
         # Reuse the single Gallery backend for live palette edits and
         # coalesced RGB updates in each already constructed scenario.
