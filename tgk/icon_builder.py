@@ -291,12 +291,17 @@ def _raster_backend():
 
 
 def build_assets(output_root,*,names=None,raster=False,overwrite=False,
-                 low=32,mid=96,high=256,max_icons=1500):
+                 low=None,mid=None,high=None,max_icons=1500):
     """Build EVERYTHING in staging first; atomically publish only on success.
 
     output_root/icons/{svg,ico,low_res,mid_res,high_res}. The raster folders
     exist but remain empty for a deterministic SVG-only run.
     """
+    from .config import settings
+    configured=settings()["icons"]
+    low=configured["low_res"] if low is None else low
+    mid=configured["mid_res"] if mid is None else mid
+    high=configured["high_res"] if high is None else high
     if type(max_icons) is not int or not 1<=max_icons<=5000:
         raise ValueError("max_icons must be in 1..5000")
     sizes=(low,mid,high)
@@ -374,9 +379,9 @@ def main(argv=None):
     parser.add_argument("--icon",action="append",dest="names",help="select specific recipe names")
     parser.add_argument("--raster",action="store_true",help="also export PNG/JPG/ICO (CairoSVG+Pillow)")
     parser.add_argument("--overwrite",action="store_true",help="replace existing icons/ atomically")
-    parser.add_argument("--low",type=int,default=32)
-    parser.add_argument("--mid",type=int,default=96)
-    parser.add_argument("--high",type=int,default=256)
+    parser.add_argument("--low",type=int,default=None)
+    parser.add_argument("--mid",type=int,default=None)
+    parser.add_argument("--high",type=int,default=None)
     parser.add_argument("--max-icons",type=int,default=1500)
     args=parser.parse_args(argv)
     result=build_assets(args.output,names=args.names,raster=args.raster,
