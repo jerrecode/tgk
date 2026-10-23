@@ -20,7 +20,7 @@ class InputFrameTests(unittest.TestCase):
         backend.event(FakeTG.Event('text',{'id':field._native.id,'text':'abc'}))
         self.assertEqual(field.text,'abc')
         self.assertEqual(seen,['abc'])
-        self.assertFalse(hasattr(field._native,'settext_value'))
+        self.assertNotIn('settext_value',field._native.__dict__)
         self.assertNotIn('_native_text_event',field.__dict__)
         field.text='programmatic edit'
         self.assertEqual(field._native.settext_value,('programmatic edit',))
@@ -73,7 +73,7 @@ class InputFrameTests(unittest.TestCase):
         scroll.add_widget(content)
         backend.render(scroll)
         self.assertEqual(content._native.setwidth_value,('MATCH_PARENT',))
-        self.assertFalse(hasattr(content._native,'setheight_value'))
+        self.assertNotIn('setheight_value',content._native.__dict__)
 
     def test_gallery_can_switch_scenarios_without_activity_recreation(self):
         from tgk.demos import Gallery
