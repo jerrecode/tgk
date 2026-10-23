@@ -42,12 +42,15 @@ class NavigationTests(unittest.TestCase):
     def test_tabbed_panel_dispatch_and_native_visibility(self):
         FakeTG.views=[];FakeTG.count=0
         # FakeTG matches the native method names; no hashable Button required.
+        class TabNative(FakeTG._View):
+            def selecttab(self,index):
+                self.selected=index
         class TabTG:
             Activity=FakeTG.Activity
             View=FakeTG.View
             LinearLayout=FakeTG._View
             FrameLayout=FakeTG._View
-            TabLayout=FakeTG._View
+            TabLayout=TabNative
             TextView=FakeTG._View
             Button=FakeTG._View
         tg=TabTG()
