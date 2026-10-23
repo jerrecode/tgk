@@ -18,7 +18,7 @@ _PATHS = {
     "invert_selection": "M4 4H12V12H4Z M12 12H20V20H12Z M15 3L19 3L19 7 M9 21H5V17",
     "copy": "M8 7H20V21H8Z M4 17H3V3H16V7 M11 11H17",
     "paste": "M9 4H15V6H19V21H5V6H9Z M9 3H15V8H9Z M9 12H15 M9 16H15",
-    "cut": "M6 7A3 3 0 1 1 0 7A3 3 0 0 1 6 7 M6 17A3 3 0 1 1 0 17A3 3 0 0 1 6 17 M6 9L20 21 M6 15L20 3 M16 17L20 21",
+    "cut": "M9 7A3 3 0 1 1 3 7A3 3 0 0 1 9 7 M9 17A3 3 0 1 1 3 17A3 3 0 0 1 9 17 M9 9L20 21 M9 15L20 3 M16 17L20 21",
     "move": "M12 2V22 M2 12H22 M8 6L12 2L16 6 M8 18L12 22L16 18 M6 8L2 12L6 16 M18 8L22 12L18 16",
     "pack": "M4 9H20V21H4Z M4 9L8 3H16L20 9 M12 3V16 M9 13L12 16L15 13",
     "unpack": "M4 8H20V21H4Z M4 8L8 3H16L20 8 M12 16V3 M9 6L12 3L15 6",
@@ -30,7 +30,7 @@ _PATHS = {
     "wrong": "M5 5L19 19 M19 5L5 19 M3 3H21V21H3Z",
     "close": "M5 5L19 19 M19 5L5 19",
     "proceed": "M3 12H21 M14 5L21 12L14 19",
-    "run": "M3 4H21V20H3Z M6 9L10 12L6 15 M12 16H18",
+    "run": "M3 4H21V20H3Z",
     "loading": "M12 2A10 10 0 0 1 22 12 M12 22A10 10 0 0 1 2 12 M17 3L21 5L21 9",
     "home": "M3 11L12 3L21 11 M6 10V21H18V10 M10 21V14H14V21",
     "delete": "M4 6H20 M9 6V4H15V6 M6 6L7 21H17L18 6 M10 10V17 M14 10V17",
@@ -48,7 +48,7 @@ _PATHS = {
     "plus": "M12 4V20 M4 12H20",
     "minus": "M4 12H20",
     "edit": "M3 21L8 20L21 7L17 3L4 16Z M14 6L18 10",
-    "refresh": "M20 10A8 8 0 0 0 6 6 M6 6V2 M6 6H10 M4 14A8 8 0 0 0 18 18 M18 18V22 M18 18H14",
+    "refresh": "M20 10A8 8 0 0 0 6 6 M4 14A8 8 0 0 0 18 18",
     "download": "M12 3V16 M7 11L12 16L17 11 M4 18V21H20V18",
     "upload": "M12 17V4 M7 9L12 4L17 9 M4 18V21H20V18",
     "share": "M7 12L17 6 M7 12L17 18 M6 9A3 3 0 1 1 6 15A3 3 0 0 1 6 9 M19 3A3 3 0 1 1 19 9A3 3 0 0 1 19 3 M19 15A3 3 0 1 1 19 21A3 3 0 0 1 19 15",
@@ -112,6 +112,8 @@ _PATHS = {
     "zoom_reset": "M10 3A7 7 0 1 1 10 17A7 7 0 1 1 10 3 M15 15L22 22 M10 7V13 M7 10H13",
     "zoom_fit": "M2 9V2H9 M15 2H22V9 M2 15V22H9 M15 22H22V15 M6 6L10 10 M18 18L14 14",
     "focus": "M3 9V3H9 M15 3H21V9 M3 15V21H9 M15 21H21V15 M9 12H15 M12 9V15",
+    "fullscreen": "M3 9V3H9 M15 3H21V9 M3 15V21H9 M15 21H21V15",
+    "fullscreen_exit": "M9 3V9H3 M15 3V9H21 M9 21V15H3 M15 21V15H21",
     "canvas": "M3 3H21V21H3Z M7 17L11 12L14 15L18 9 M7 7H7.5",
     "ruler": "M3 7L17 3L21 17L7 21Z M8 6L10 10 M12 5L14 8 M6 10L9 12",
     "measure": "M3 12H21 M7 8L3 12L7 16 M17 8L21 12L17 16",
@@ -158,7 +160,7 @@ _PATHS = {
     "cloud": "M6 19H19A4 4 0 0 0 19 11A7 7 0 0 0 5 12A4 4 0 0 0 6 19",
     "offline": "M3 3L21 21 M6 10Q12 5 18 10 M9 14Q12 12 15 14 M12 19V19.5",
     "online": "M12 2A10 10 0 1 1 12 22A10 10 0 1 1 12 2 M12 8A4 4 0 1 1 12 16A4 4 0 1 1 12 8",
-    "sync": "M3 8V5H11L13 7V16H3Z M9 3H17L19 5V13H9Z M17 16A4 4 0 0 1 22 19 M22 19V16 M22 19H19 M22 20A4 4 0 0 1 17 23 M17 23V20 M17 23H20",
+    "sync": "M3 8V5H11L13 7V16H3Z M9 3H17L19 5V13H9Z",
 }
 # Accented secondary geometry where it improves readability without changing
 # the fundamental pictogram (e.g. refresh arrows and terminal prompt).
@@ -252,8 +254,7 @@ _assign("fast_forward", "forward forward_two")
 _assign("fast_backward", "backward back_two")
 _assign("step_forward", "forward_one frame_forward")
 _assign("step_backward", "back_one frame_backward")
-_assign("right", "back_two_dummy forward_one_dummy")
-_assign("gallery", "gallery images")
+ _assign("gallery", "gallery images")
 _assign("video", "videos")
 _assign("audio", "audios speaker volume")
 _assign("playlist", "playlist catalogue dictionary")
@@ -273,6 +274,8 @@ _assign("zoom_in", "zoom_in")
 _assign("zoom_out", "zoom_out")
 _assign("zoom_reset", "zoom_reset")
 _assign("zoom_fit", "zoom_fit")
+_assign("fullscreen", "fullscreen")
+_assign("fullscreen_exit", "fullscreen_exit")
 _assign("focus", "focus coordinates")
 _assign("canvas", "canvas")
 _assign("ruler", "ruler")
