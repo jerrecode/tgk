@@ -342,7 +342,9 @@ def build_assets(output_root,*,names=None,raster=None,overwrite=False,
     try:
         for dirname in ("svg","ico","low_res","mid_res","high_res"):
             (stage/dirname).mkdir()
+        from .semantic_icons import ICON_GEOMETRY_REVISION
         manifest={"schema_version":1,"source":"tgk.icon_builder",
+                  "geometry_revision":ICON_GEOMETRY_REVISION,
                   "icons":{},"files":{},"raster":raster,
                   "sizes":{"low":low,"mid":mid,"high":high}}
         for name,vector in vector_sources.items():
