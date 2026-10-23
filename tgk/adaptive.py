@@ -73,6 +73,23 @@ class ScreenMetrics:
         return (round(self.width_dp*self.density),
                 round(self.height_dp*self.density))
 
+    def dp_to_px(self,dp):
+        """Logical Android dp to approximate window pixels; no panel-size claim."""
+        if isinstance(dp,bool) or not isinstance(dp,(int,float)) or not math.isfinite(dp) or dp<0:
+            raise ValueError("dp must be finite and nonnegative")
+        return round(dp*self.density)
+
+    def sp_to_px(self,sp):
+        """Scaled text units respect both density and Android font scaling."""
+        if isinstance(sp,bool) or not isinstance(sp,(int,float)) or not math.isfinite(sp) or sp<0:
+            raise ValueError("sp must be finite and nonnegative")
+        return round(sp*self.density*self.font_scale)
+
+    def px_to_dp(self,px):
+        if isinstance(px,bool) or not isinstance(px,(int,float)) or not math.isfinite(px) or px<0:
+            raise ValueError("px must be finite and nonnegative")
+        return px/self.density
+
     @property
     def size_class(self):
         if self.width_dp<DEFAULT_BREAKPOINTS[0]:return "compact"
@@ -115,10 +132,18 @@ class LayoutScale:
         return {"compact":self.compact_margin_dp,"medium":self.medium_margin_dp,
                 "expanded":self.expanded_margin_dp}[metrics.size_class]
 
+    def gutter(self,metrics):
+        """Keep grid gaps bounded on narrow portrait viewports."""
+        usable=max(1.0,min(metrics.width_dp,self.max_content_width_dp)-2*self.margin(metrics))
+        if self.columns==1:return 0.0
+        return min(float(self.medium_spacing_dp),
+                   usable*0.35/(self.columns-1))
+
     def column_width(self,metrics,gutter_dp=None):
-        gutter=self.medium_spacing_dp if gutter_dp is None else gutter_dp
-        if gutter<0:raise ValueError("gutter cannot be negative")
-        usable=min(metrics.width_dp,self.max_content_width_dp)-2*self.margin(metrics)
+        gutter=self.gutter(metrics) if gutter_dp is None else gutter_dp
+        if isinstance(gutter,bool) or not isinstance(gutter,(int,float)) or not math.isfinite(gutter) or gutter<0:
+            raise ValueError("gutter must be finite and nonnegative")
+        usable=max(1.0,min(metrics.width_dp,self.max_content_width_dp)-2*self.margin(metrics))
         return max(1.0,(usable-(self.columns-1)*gutter)/self.columns)
 
     def dp(self,size):
@@ -131,9 +156,18 @@ class LayoutScale:
         return max(self.touch_target_dp,math.ceil(_positive(requested,"requested height")))
 
 
-def arrange_spans(children,columns=12,metrics=None):
-    """Pure first-fit row packing of child spans with deterministic bounds."""
-    if type(columns) is not int or columns<1:raise ValueError("invalid column count")
+def arrange_spans(children,columns=12,metrics=None,span_units=None):
+    """Deterministic first-fit packing with optional 12-unit logical spans.
+
+    A grid with 6 physical columns can interpret old 12-unit spans:
+    12 -> 6, 6 -> 3, 4 -> 2. Values are rounded UP to preserve visibility.
+    Without span_units, legacy column-based semantics are unchanged.
+    """
+    if type(columns) is not int or not 1<=columns<=32:
+        raise ValueError("invalid column count")
+    if span_units is None:span_units=columns
+    if type(span_units) is not int or not 1<=span_units<=32:
+        raise ValueError("invalid span units")
     if metrics is None:metrics=ScreenMetrics(393,852)
     positions=[]
     row=0;col=0
@@ -142,12 +176,13 @@ def arrange_spans(children,columns=12,metrics=None):
         if requested is None:
             choices={"compact":"span_compact","medium":"span_medium",
                      "expanded":"span_expanded"}
-            requested=getattr(widget,choices[metrics.size_class],columns)
-        if type(requested) is not int or not 1<=requested<=columns:
+            requested=getattr(widget,choices[metrics.size_class],span_units)
+        if type(requested) is not int or not 1<=requested<=span_units:
             raise ValueError("invalid responsive grid span")
-        if col+requested>columns:row+=1;col=0
-        positions.append((row,col,1,requested))
-        col+=requested
+        width=min(columns,(requested*columns+span_units-1)//span_units)
+        if col+width>columns:row+=1;col=0
+        positions.append((row,col,1,width))
+        col+=width
         if col==columns:row+=1;col=0
     return positions
 
