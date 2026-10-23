@@ -21,6 +21,33 @@ python examples/demo.py
 
 The installer builds `tgk/libtgk.so` **on your device** for its ABI and enables a reversible Kivy import hook. By default it installs in **editable mode**: keep the cloned `tgk` directory. If you want a standalone installation and to remove the source checkout afterwards, use `sh ./install.sh --copy`. You can combine `--copy` with `--no-auto` to avoid installing the Kivy startup hook. To enable it later run `python -m tgk.install_hook`. Both modes verify that the C library loads after installation.
 
+## Update an existing TGK installation
+
+From the original checkout on Termux, update the tracked `main` branch and
+rebuild the native C renderer for **your current Android device**:
+
+```sh
+cd ~/tgk
+git switch main
+git pull --ff-only
+sh ./install.sh --copy
+python -m tgk.config validate
+python -c 'import tgk; from tgk.canvas import _lib; _lib(); print(tgk.__version__)'
+```
+
+For developers intentionally using an **editable** checkout, use
+`sh ./install.sh --editable` instead. A source clone nested at
+`~/tgk/tgk-tools` is a separate repository and needs its own update.
+Run `tgk doctor --connect` after updating TGK Tools to check the actual
+Termux:GUI IPC connection.
+
+The installer creates any missing configuration/preset files but does not
+replace user-edited files in `~/.config/tgk` (or `TGK_CONFIG_HOME`).
+If `git pull --ff-only` refuses, inspect `git status` and your current
+branch; do not use `git reset --hard` to resolve local work automatically.
+Reinstalling through `pip` without rebuilding C is **not** equivalent to
+running `install.sh`.
+
 ```sh
 # Temporarily use normal Kivy instead of TGK
 TGK_DISABLE=1 python another_app.py
@@ -336,6 +363,27 @@ implement FTP, SSH, Telnet, SOCKS, SFTP, SMTP, Gopher, UDP, live media decoding,
 hardware video rendering or automatic multiprocessing. They are building
 blocks to integrate such opt-in plugins safely. Android throughput and
 power consumption remain unmeasured.
+
+### Configurable width breakpoints and accessible touch sizing
+
+The adaptive layout can independently configure compact and expanded
+breakpoint widths (defaults 600 and 840 dp) and a capped text-scale touch
+minimum. Saved configuration keys are
+`layout.compact_breakpoint_dp`, `layout.expanded_breakpoint_dp`, and
+`layout.font_touch_scale_limit_pct`. Each is validated by
+`python -m tgk.config validate`.
+
+```sh
+python -m tgk.config set layout compact_breakpoint_dp 580
+python -m tgk.config set layout expanded_breakpoint_dp 900
+python -m tgk.config set layout font_touch_scale_limit_pct 150
+```
+
+ResponsiveGrid remains native-column-configurable and its 12-unit logical
+spans work at different physical column counts. Android font scale raises
+the minimum touch target within the percentage cap; it does **not** replace
+root `MATCH_PARENT`, vertically weighted heights, or opt-in SizeSpec
+contracts. System bars/insets and physical FPS are never guessed.
 
 ## Adaptive Android dp grid and expanded semantic UI styles
 
