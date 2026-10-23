@@ -759,6 +759,12 @@ class TermuxBackend:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
         if component is not None and component.margin_dp:
             native.setmargin(int(component.margin_dp))
+        if isinstance(node.parent,ScreenManager):
+            # Prevent hidden pages flashing as the native tree is constructed
+            # before ScreenManager._sync runs at the end of the render pass.
+            current=node.parent.current or (node.parent.children[0].name
+                         if node.parent.children else None)
+            native.setvisibility(2 if node.name==current else 0)
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
         self._apply_size_spec(node)
