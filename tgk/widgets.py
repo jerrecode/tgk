@@ -721,6 +721,10 @@ class TermuxBackend:
             # default WRAP_CONTENT leads to zero-height/overlapping pages.
             if not hasattr(node,'width'):native.setwidth('MATCH_PARENT')
             if not hasattr(node,'height'):native.setheight('MATCH_PARENT')
+        elif isinstance(node.parent,ScrollView):
+            # NestedScrollView children must fill width, but retain their
+            # natural height to allow scrolling without clipping.
+            if not hasattr(node,'width'):native.setwidth('MATCH_PARENT')
         if isinstance(node.parent,BoxLayout):
             weight=getattr(node,'weight',None)
             if weight is not None and (isinstance(weight,bool) or not isinstance(weight,int) or weight<0):
