@@ -19,6 +19,9 @@ SCHEMA_VERSION=1
 MAX_JSON_BYTES=512*1024
 DEFAULT_CONFIG={
     "schema_version":SCHEMA_VERSION,
+    # Explicitly pinned values override a profile even when equal to the
+    # factory default; legacy configs lacking this field remain supported.
+    "pinned":[],
     "ui":{"theme":"midnight","text_style":"body","orientation":"system",
           "window_mode":"normal","option_profile":"balanced"},
     "layout":{
@@ -94,6 +97,15 @@ def validate_config(value):
     _merge(config,value)
     if type(config["schema_version"]) is not int or config["schema_version"]!=SCHEMA_VERSION:
         raise ValueError("unsupported TGK config schema_version")
+    pinned=config["pinned"]
+    if type(pinned) is not list or len(pinned)>128 or any(
+            type(x) is not str or "." not in x for x in pinned):
+        raise ValueError("pinned must be a bounded list of section.field keys")
+    allowed={f"{section}.{key}" for section,values in DEFAULT_CONFIG.items()
+             if section in ("ui","layout","runtime","io","icons","tools")
+             for key in values}
+    if len(pinned)!=len(set(pinned)) or any(x not in allowed for x in pinned):
+        raise ValueError("unknown or duplicate pinned settings")
     ui=config["ui"]
     for key in ("theme","text_style","option_profile"):_safe_name(ui[key])
     if ui["orientation"] not in ("system","portrait","landscape"):
@@ -146,13 +158,81 @@ def load_config(path=None):
     # Old installers wrote ALL built-in keys, so treat unchanged built-in
     # values as inherited to keep 0.6 configuration files compatible.
     profile=option_config(name)
+    pinned=set(specified["pinned"])
     for section in ("layout","runtime","io","tools"):
         for key,value in specified[section].items():
-            if value!=DEFAULT_CONFIG[section][key]:
+            if value!=DEFAULT_CONFIG[section][key] or f"{section}.{key}" in pinned:
                 profile[section][key]=value
     profile["ui"].update(specified["ui"])
     profile["icons"].update(specified["icons"])
+    profile["pinned"]=specified["pinned"]
     return validate_config(profile)
+
+
+def clear_config_cache():
+    """Explicitly discard the cached file snapshot after external edits."""
+    _load_cached.cache_clear()
+
+
+def _atomic_config_replace(changed,root,target):
+    """Validate first; write to sibling temp; replace only after fsync."""
+    import tempfile
+    encoded=(json.dumps(changed,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
+    if len(encoded)>MAX_JSON_BYTES:
+        raise ValueError("TGK config exceeds maximum size")
+    if root.is_symlink() or target.is_symlink():
+        raise ValueError("refusing symlink config destination")
+    fd,name=tempfile.mkstemp(prefix=".tgk-config-",suffix=".json",dir=root)
+    tmp=Path(name)
+    try:
+        with os.fdopen(fd,"wb") as stream:
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(tmp,0o600)
+        if target.is_symlink():
+            raise ValueError("refusing symlink config destination")
+        os.replace(tmp,target)
+    finally:
+        tmp.unlink(missing_ok=True)
+    clear_config_cache()
+
+
+def update_config(section,key,value,*,reset=False):
+    """Atomically update one setting without replacing unrelated user presets.
+
+    Profiles apply to unpinned defaults. Passing reset=True restores factory
+    inheritance, including any active option profile's chosen value.
+    """
+    _safe_name(section)
+    _safe_name(key)
+    if section not in ("ui","layout","runtime","io","icons","tools"):
+        raise ValueError("unknown config section")
+    if key not in DEFAULT_CONFIG[section]:
+        raise ValueError("unknown config setting")
+    root=config_home()
+    target=config_path()
+    if root.is_symlink() or target.is_symlink():
+        raise ValueError("refusing symlink config path")
+    if not target.is_file():
+        raise FileNotFoundError("initialize settings with python -m tgk.config init")
+    raw=_read_json(target)
+    changed=validate_config(raw)
+    # Preserve the *stored* settings, not profile-inherited effective values.
+    changed=deepcopy(DEFAULT_CONFIG)
+    _merge(changed,raw)
+    name=f"{section}.{key}"
+    pins=set(changed["pinned"])
+    if reset:
+        changed[section][key]=DEFAULT_CONFIG[section][key]
+        pins.discard(name)
+    else:
+        changed[section][key]=value
+        pins.add(name)
+    changed["pinned"]=sorted(pins)
+    validate_config(changed)
+    _atomic_config_replace(changed,root,target)
+    return load_config()
 
 
 def option_config(name):
@@ -249,9 +329,22 @@ def configured_io_limits():
 def main(argv=None):
     import argparse
     parser=argparse.ArgumentParser(description="Initialize/read persistent TGK configuration")
-    parser.add_argument("action",choices=("init","show","path","validate"),nargs="?",default="show")
+    parser.add_argument("action",choices=("init","show","path","validate","set","reset"),
+                        nargs="?",default="show")
+    parser.add_argument("section",nargs="?")
+    parser.add_argument("key",nargs="?")
+    parser.add_argument("value",nargs="?")
     args=parser.parse_args(argv)
-    if args.action=="init":result=initialize_config()
+    if args.action in ("set","reset"):
+        if not args.section or not args.key or (args.action=="set" and args.value is None):
+            parser.error("set needs SECTION KEY VALUE; reset needs SECTION KEY")
+        if args.action=="reset":
+            result=update_config(args.section,args.key,None,reset=True)
+        else:
+            try:decoded=json.loads(args.value)
+            except json.JSONDecodeError:decoded=args.value
+            result=update_config(args.section,args.key,decoded)
+    elif args.action=="init":result=initialize_config()
     elif args.action=="path":result={"path":str(config_path())}
     elif args.action=="show":result=load_config()
     else:result={"valid":True,"config":load_config()}
