@@ -159,7 +159,16 @@ class ResponsiveGrid(GridLayout):
     It does not reconstruct native Views or change a GridLayout's column count.
     """
     def __init__(self,**kwargs):
-        super().__init__(cols=12,rows=kwargs.pop('rows',0),**kwargs)
+        specified=kwargs.pop('cols',None)
+        units=kwargs.pop('span_units',12)
+        if specified is not None and (type(specified) is not int or not 1<=specified<=32):
+            raise ValueError('ResponsiveGrid cols must be in 1..32')
+        if type(units) is not int or not 1<=units<=32:
+            raise ValueError('ResponsiveGrid span_units must be in 1..32')
+        super().__init__(cols=(specified if specified is not None else 12),
+                         rows=kwargs.pop('rows',0),**kwargs)
+        self._auto_columns=(specified is None)
+        self._span_units=units
 
 class FloatLayout(Widget): pass # native FrameLayout, limited Kivy positioning
 class ScrollView(Widget): pass
@@ -466,12 +475,17 @@ class TermuxBackend:
         for node in tuple(self.nodes):
             if isinstance(node,ResponsiveGrid):
                 self._reflow_grid(node)
+            if isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider)):
+                self._set_touch_height(node)
         return measured
 
     def _reflow_grid(self,node):
         from .adaptive import arrange_spans,ScreenMetrics
         metrics=self.screen_metrics or ScreenMetrics(393,852)
-        positions=arrange_spans(node.children,columns=12,metrics=metrics)
+        columns=self.layout_scale.columns if node._auto_columns else node.cols
+        positions=arrange_spans(node.children,columns=columns,metrics=metrics,
+                                span_units=node._span_units,
+                                size_class=self.layout_scale.size_class(metrics))
         for child,(row,col,rows,cols) in zip(node.children,positions):
             native=child._native
             if native is not None:
@@ -479,6 +493,27 @@ class TermuxBackend:
                 if child._applied_native_style.get('grid_position')!=signature:
                     native.setgridlayoutparams(row,col,rows,cols,'fill','fill')
                     child._applied_native_style['grid_position']=signature
+
+    def _set_touch_height(self,node,component=None):
+        from .style_tokens import ComponentStyle,resolve_component_style
+        if component is None:
+            component=getattr(node,'component_style',None)
+            if isinstance(component,str):component=resolve_component_style(component)
+        if component is not None and not isinstance(component,ComponentStyle):
+            raise TypeError('component_style must be a named preset or ComponentStyle')
+        requested=getattr(node,'height',None)
+        if getattr(node,'allow_small_touch_target',False):
+            height=None if requested is None else math.ceil(requested)
+        else:
+            minimum=self.layout_scale.touch_height(metrics=self.screen_metrics)
+            if component is not None:
+                minimum=max(minimum,component.min_touch_dp)
+            if isinstance(node,Slider):minimum=max(72,minimum)
+            height=max(minimum,math.ceil(requested) if requested is not None else 0)
+        if height is not None and node._native is not None:
+            if node._applied_native_style.get('touch_height')!=height:
+                node._native.setheight(height)
+                node._applied_native_style['touch_height']=height
 
     def _make(self,node,parent):
         """Build a native view tree iteratively, with postorder finalization.
@@ -547,7 +582,9 @@ class TermuxBackend:
         elif isinstance(node,BoxLayout):
             native=tg.LinearLayout(a,parent,vertical=node.orientation=='vertical')
         elif isinstance(node,GridLayout):
-            cols=int(node.cols or max(1,(len(node.children)+int(node.rows)-1)//int(node.rows)))
+            cols=(self.layout_scale.columns if isinstance(node,ResponsiveGrid) and
+                  node._auto_columns else
+                  int(node.cols or max(1,(len(node.children)+int(node.rows)-1)//int(node.rows))))
             rows=len(node.children) if isinstance(node,ResponsiveGrid) else int(
                 node.rows or (len(node.children)+cols-1)//cols)
             native=tg.GridLayout(a,max(1,rows),max(1,cols),parent)
@@ -620,12 +657,9 @@ class TermuxBackend:
             raise TypeError('component_style must be a named preset or ComponentStyle')
         interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
         requested=getattr(node,'height',None)
-        if interactive and not getattr(node,'allow_small_touch_target',False):
-            minimum=component.min_touch_dp if component is not None else self.layout_scale.touch_target_dp
-            if requested is None:
-                requested=max(72,minimum) if isinstance(node,Slider) else minimum
-            else:requested=max(float(requested),minimum)
-        if requested is not None:native.setheight(int(math.ceil(requested)))
+        if interactive:
+            self._set_touch_height(node,component=component)
+        elif requested is not None:native.setheight(int(math.ceil(requested)))
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
         if node.parent is None:
             # Fill the Activity content viewport instead of leaving a
