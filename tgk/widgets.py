@@ -822,9 +822,9 @@ class TermuxBackend:
                         self.event(event)
                         if event.type=='destroy' and event.value.get('finishing',False):
                             running=False
-                    Clock.tick()
+                    Clock.tick(max_callbacks=getattr(self,'clock_callbacks_per_tick',128))
                     if event is None and not self._stop_requested:
-                        time.sleep(0.01)
+                        time.sleep(getattr(self,'idle_sleep_seconds',0.01))
             finally:
                 # Cancel callbacks associated with this Activity before closing
                 # native views, avoiding stale timer writes after app shutdown.
@@ -862,10 +862,20 @@ class App(EventDispatcher):
         from .typography import resolve_text_style,get_text_style
         selected=kwargs.pop('theme',None)
         typography=kwargs.pop('text_style',None)
-        self.window_mode=kwargs.pop('window_mode','normal')
-        self.orientation_mode=kwargs.pop('orientation_mode','system')
+        from .config import load_config,configured_layout_scale
+        runtime=load_config()
+        self.window_mode=kwargs.pop('window_mode',runtime['ui']['window_mode'])
+        self.orientation_mode=kwargs.pop('orientation_mode',runtime['ui']['orientation'])
         from .adaptive import LayoutScale
-        self.layout_scale=kwargs.pop('layout_scale',None) or LayoutScale()
+        self.layout_scale=kwargs.pop('layout_scale',None) or configured_layout_scale()
+        self.clock_callbacks_per_tick=kwargs.pop(
+            'clock_callbacks_per_tick',runtime['runtime']['clock_callbacks_per_tick'])
+        self.idle_sleep_seconds=kwargs.pop(
+            'idle_sleep_seconds',runtime['runtime']['idle_sleep_seconds'])
+        if type(self.clock_callbacks_per_tick) is not int or not 1<=self.clock_callbacks_per_tick<=10000:
+            raise ValueError('clock_callbacks_per_tick must be 1..10000')
+        if type(self.idle_sleep_seconds) not in (float,int) or not math.isfinite(self.idle_sleep_seconds) or not 0<=self.idle_sleep_seconds<=.1:
+            raise ValueError('idle_sleep_seconds must be finite between 0 and 0.1')
         if not isinstance(self.layout_scale,LayoutScale):
             raise TypeError('layout_scale must be a LayoutScale')
         if self.orientation_mode not in ('system','portrait','landscape'):
@@ -903,6 +913,8 @@ class App(EventDispatcher):
                                         window_mode=self.window_mode,
                                         layout_scale=self.layout_scale)
             self._backend.orientation_mode=self.orientation_mode
+            self._backend.clock_callbacks_per_tick=self.clock_callbacks_per_tick
+            self._backend.idle_sleep_seconds=self.idle_sleep_seconds
             self._backend.run(self.root,self.on_start)
         finally:
             try:self.on_stop()
