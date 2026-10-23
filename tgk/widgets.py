@@ -637,7 +637,6 @@ class TermuxBackend:
                 if val is None:
                     val=node._native.gettext()
                 node.text=str(val)
-            break
     def run(self,root,on_start=None):
         with self.tg.Connection() as c:
             self.connection=c
