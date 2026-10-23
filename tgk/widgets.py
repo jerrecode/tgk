@@ -126,7 +126,8 @@ class Widget(EventDispatcher):
                 self._slider_draw()
         if name in ('theme','colors','background_color','text_color',
                     'text_style','text_size','font_weight','font_family','italic',
-                    'underline','strike','text_align','line_height','font_color_role'):
+                    'underline','strike','text_align','line_height','font_color_role',
+                    'visual_state','selected','disabled'):
             if self._theme_hook is not None:self._theme_hook(name)
         if name=='visible' and n is not None and hasattr(n,'setvisibility'):
             n.setvisibility(2 if value else 0)
@@ -321,7 +322,15 @@ class TermuxBackend:
         if background is None:
             if node.parent is None:background=selected['background']
             elif isinstance(node,(BoxLayout,GridLayout,FloatLayout,ScrollView)):background=selected['surface']
-            elif isinstance(node,(Button,TextInput)):background=selected['button' if isinstance(node,Button) else 'surface_alt']
+            elif isinstance(node,Button):
+                state=getattr(node,'visual_state','normal')
+                if state not in ('normal','pressed','active','disabled'):
+                    raise ValueError('button visual_state must be normal/pressed/active/disabled')
+                role={'normal':'button','pressed':'button_pressed',
+                      'active':'button_active','disabled':'button_inactive'}[state]
+                background=selected[role]
+            elif isinstance(node,TextInput):background=selected['input_background']
+            elif isinstance(node,Spinner):background=selected['dropdown_background']
         if background is not None:
             self._cached_set(node,'background','setbackgroundcolor',tgui_color(background))
         from .advanced import InfiniteCanvas,RichTextLabel
@@ -513,7 +522,8 @@ class TermuxBackend:
         interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
         requested=getattr(node,'height',None)
         if interactive and not getattr(node,'allow_small_touch_target',False):
-            if requested is None:requested=self.layout_scale.touch_target_dp
+            if requested is None:
+                requested=72 if isinstance(node,Slider) else self.layout_scale.touch_target_dp
             else:requested=max(float(requested),self.layout_scale.touch_target_dp)
         if requested is not None:native.setheight(int(math.ceil(requested)))
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
