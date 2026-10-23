@@ -337,6 +337,48 @@ hardware video rendering or automatic multiprocessing. They are building
 blocks to integrate such opt-in plugins safely. Android throughput and
 power consumption remain unmeasured.
 
+## Fluid responsive sizing and accessible controls
+
+TGK now supports a configurable physical native grid column count while
+preserving 12-unit component span definitions. For example, set
+`layout.columns=8`: a design span of 12/6/4 units maps to 8/4/3
+native grid columns on compact/medium/expanded windows, respectively.
+Apps can also provide `ResponsiveGrid(cols=4)` to override the configured
+native column count for one panel. The native GridLayout is created with
+the effective number of columns; rotation reflows existing children
+without destroying Views.
+
+The breakpoints `layout.compact_breakpoint_dp` (default 600dp) and
+`layout.expanded_breakpoint_dp` (default 840dp) are configurable. A
+user's older preset/config continues to load with these defaults.
+`LayoutScale.size_class(metrics)` applies the configured boundaries,
+while `ScreenMetrics.size_class` remains the unchanged 600/840 standard
+for compatibility. Layout spacing uses the Android *content window's dp*
+width and the application's configured maximum content width.
+
+Touch targets honor actual Android font-scale changes: at 1.25× font scale,
+a standard 48dp control becomes at least 60dp tall. The multiplier is
+bounded by `layout.font_touch_scale_limit_pct` (default 150%) so extreme
+font settings do not cause unlimited vertical growth. Existing explicit
+larger heights and opt-outs remain respected. Native sizes are updated in
+place on a `config` event, with a cache to avoid repeated IPC calls.
+
+`ScreenMetrics.safe_content_size_dp` subtracts top/bottom inset heights
+**only when supplied authoritatively**. Normal Android Activities already
+provide a content viewport below system chrome. No imaginary status-bar
+or keyboard height is added. Hardware refresh rate and color depth are
+still reported only if an actual provider supplied them.
+
+```sh
+python -m tgk.config set layout columns 8
+python -m tgk.config set layout compact_breakpoint_dp 480
+python -m tgk.config set layout expanded_breakpoint_dp 760
+python -m tgk.config set layout font_touch_scale_limit_pct 175
+
+# Restore per-profile/default inheritance:
+python -m tgk.config reset layout columns
+```
+
 ## Adaptive Android dp grid and expanded semantic UI styles
 
 TGK's optional `ResponsiveGrid` implements a **12-column width-class grid**,
