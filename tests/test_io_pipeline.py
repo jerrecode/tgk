@@ -112,10 +112,12 @@ class StreamTests(unittest.TestCase):
         with patch('subprocess.Popen',side_effect=Process):
             data=ffprobe(source)
         self.assertEqual(data['streams'][0]['codec_name'],'h264')
-        with patch('subprocess.Popen',side_effect=Process):
+        class OversizeProcess(Process):
+            def __init__(self,argv,stdin,stdout,stderr,close_fds):
+                stdout.write(b'x'*2048)
+        with patch('subprocess.Popen',side_effect=OversizeProcess):
             with self.assertRaisesRegex(ValueError,'too large'):
-                ffprobe(source,max_json_bytes=1024) if False else ffprobe(source,max_json_bytes=1024)
-        # The probe with small JSON is a valid bounded result.
+                ffprobe(source,max_json_bytes=1024)
     def test_ffprobe_rejects_nonexistent_file(self):
         with self.assertRaises(FileNotFoundError):
             ffprobe(self.root/'missing')
