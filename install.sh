@@ -45,5 +45,10 @@ if [ "$ENABLE_AUTO" -eq 1 ]; then "$PYTHON" -m tgk.install_hook; fi
 # Reinstall is create-only: preserve every user-edited palette, style,
 # option profile and config.json instead of replacing local settings.
 "$PYTHON" -m tgk.config init
+# Validate selected defaults AND every installed palette, text and option
+# preset. An inactive, malformed saved preset must not be silently ignored.
+# Both checks are read-only; user edits are never overwritten by reinstallation.
+"$PYTHON" -m tgk.config validate >/dev/null
+"$PYTHON" -m tgk.config audit >/dev/null
 "$PYTHON" -c 'import tgk; from tgk.canvas import _lib; _lib(); print("Installed TGK:", tgk.__version__, "from", tgk.__file__)'
 printf '%s\n' 'Ready. Check the Termux:GUI service with: tgk doctor --connect (requires tgk-tools).'
