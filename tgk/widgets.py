@@ -246,6 +246,10 @@ class TermuxBackend:
                 raise RuntimeError('pip install termuxgui on Termux; Termux:GUI Android plugin is also required') from exc
         self.tg=tg
         self.connection=None; self.activity=None;self.nodes=[]
+        # Termux:GUI native View instances may be unhashable. Numeric View IDs
+        # are hashable, stable during an Activity and permit O(1) event lookup.
+        self._native_index={}
+        self._tab_index={}
         self._slider_resources=[]
         self._canvas_resources=[]
         self._stop_requested=False
@@ -368,6 +372,8 @@ class TermuxBackend:
         if isinstance(node,TabbedPanel):
             native=tg.LinearLayout(a,parent,vertical=True)
             node._tab_bar=tg.TabLayout(a,native)
+            tab_id=getattr(node._tab_bar,'id',None)
+            if type(tab_id) in (int,str):self._tab_index[tab_id]=node
             node._tab_bar.setlist([c.title for c in node.children])
             tab_content=tg.FrameLayout(a,native)
             tab_content.setheight(0)
@@ -444,6 +450,8 @@ class TermuxBackend:
         elif isinstance(node,ProgressBar):native=tg.ProgressBar(a,parent)
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
+        native_id=getattr(native,'id',None)
+        if type(native_id) in (int,str):self._native_index[native_id]=node
         node._theme_hook=lambda changed,node=node: self.invalidate_style(node,changed)
         if isinstance(node,ScreenManager):
             node._sync_views=node._sync
@@ -590,10 +598,15 @@ class TermuxBackend:
         if e.type=='destroy':return
         if e.type not in ('click','text','itemselected','touch'):return
         match=e.value.get('id')
+        # The Android protocol sends a numeric ID. Keep the legacy equality
+        # fallback for custom/mock bindings that do not expose a scalar ID.
+        indexed=type(match) in (int,str)
         if e.type=='itemselected':
-            for parent in self.nodes:
-                if not isinstance(parent,TabbedPanel) or match!=parent._tab_bar:
-                    continue
+            parent=self._tab_index.get(match) if indexed else None
+            if parent is None:
+                parent=next((item for item in self.nodes if
+                             isinstance(item,TabbedPanel) and match==item._tab_bar),None)
+            if parent is not None:
                 value=e.value.get('selected')
                 try:index=int(value)
                 except (TypeError,ValueError,OverflowError):return
@@ -602,9 +615,10 @@ class TermuxBackend:
                 try:parent.switch(parent.children[index].name)
                 finally:parent._tab_syncing=False
                 return
-        for node in self.nodes:
-            # Termux:GUI Python bindings implement native view == numerical ID.
-            if match!=node._native:continue
+        node=self._native_index.get(match) if indexed else None
+        if node is None:
+            node=next((item for item in self.nodes if match==item._native),None)
+        if node is not None:
             if e.type=='touch' and isinstance(node,Slider):
                 self._slider_touch(node,e)
             elif e.type=='touch' and isinstance(node,InfiniteCanvas):
@@ -654,6 +668,8 @@ class TermuxBackend:
                     canvas.close()
                     buffer.__exit__(None,None,None)
                 self._slider_resources.clear()
+                self._native_index.clear()
+                self._tab_index.clear()
                 for viewport,buffer,canvas in reversed(self._canvas_resources):
                     viewport._draw_viewport=None
                     canvas.close()
