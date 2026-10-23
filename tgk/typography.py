@@ -104,14 +104,20 @@ class TextStyle:
 def resolve_text_style(style="body",**overrides):
     if isinstance(style,TextStyle):
         base=style
-    elif isinstance(style,str) and style in PRESETS:
-        base=TextStyle(**PRESETS[style])
+    elif isinstance(style,str):
+        from .config import text_registry
+        catalog=text_registry()
+        if style not in catalog:raise ValueError("unknown typography preset: "+str(style))
+        base=catalog[style]
     else:raise ValueError("unknown typography preset: "+str(style))
     return base.override(**overrides) if overrides else base
 
 _active=ContextVar("tgk_typography",default=None)
 def get_text_style():
-    return _active.get() or resolve_text_style("body")
+    selected=_active.get()
+    if selected is not None:return selected
+    from .config import settings
+    return resolve_text_style(settings()["defaults"]["typography"])
 def set_text_style(style="body",**overrides):
     value=resolve_text_style(style,**overrides);_active.set(value);return value
 
