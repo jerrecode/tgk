@@ -104,7 +104,9 @@ class StudioLiveSliderTests(unittest.TestCase):
     def test_running_rgb_events_coalesce_to_one_timer(self):
         app=Laboratory(scenario='12_studio')
         app.build()
-        class Running:activity=object()
+        class Running:
+            activity=object()
+            def apply_theme(self,theme):pass
         app._backend=Running()
         from tgk.widgets import Clock
         calls=[]
