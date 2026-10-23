@@ -226,30 +226,80 @@ class Slider(Widget):
 
 
 class _Clock:
-    def __init__(self):self._jobs=[];self._ids=itertools.count();self._cancel=set()
+    """Single-threaded UI scheduler with bounded work per event-loop iteration.
+
+    Clock callbacks execute on the GUI thread. I/O or heavy rendering should
+    run in a worker; immediate recursive rescheduling cannot monopolize the
+    thread indefinitely. Reset clears callbacks owned by a closing Activity.
+    """
+    def __init__(self):
+        self._jobs=[]
+        self._ids=itertools.count()
+        self._cancel=set()
+        self._active=set()
+
     def schedule_once(self,callback,timeout=0):
+        if not callable(callback):raise TypeError("callback must be callable")
+        if isinstance(timeout,bool) or not math.isfinite(timeout) or timeout<0:
+            raise ValueError("timeout must be finite and nonnegative")
         handle=next(self._ids)
-        heapq.heappush(self._jobs,(time.monotonic()+max(0,timeout),handle,callback,0))
+        self._active.add(handle)
+        heapq.heappush(self._jobs,(time.monotonic()+timeout,handle,callback,0))
         return _ClockHandle(self,handle)
+
     def schedule_interval(self,callback,interval):
-        if interval<=0:raise ValueError('interval must be positive')
+        if not callable(callback):raise TypeError("callback must be callable")
+        if isinstance(interval,bool) or not math.isfinite(interval) or interval<=0:
+            raise ValueError("interval must be finite and positive")
         handle=next(self._ids)
+        self._active.add(handle)
         heapq.heappush(self._jobs,(time.monotonic()+interval,handle,callback,interval))
         return _ClockHandle(self,handle)
-    def tick(self):
-        now=time.monotonic()
-        while self._jobs and self._jobs[0][0]<=now:
+
+    def tick(self,max_callbacks=128):
+        """Execute at most max_callbacks jobs, including cancelled heap entries.
+
+        Jobs scheduled during a callback run on a later tick once the budget
+        is exhausted. Returns number of callbacks actually executed.
+        """
+        if type(max_callbacks) is not int or not 1<=max_callbacks<=100000:
+            raise ValueError("max_callbacks must be an integer in 1..100000")
+        executed=0
+        scanned=0
+        while scanned<max_callbacks and self._jobs:
+            now=time.monotonic()
+            if self._jobs[0][0]>now:break
             due,handle,callback,interval=heapq.heappop(self._jobs)
-            if handle in self._cancel:
-                self._cancel.discard(handle);continue
-            result=callback(max(0,now-due))
+            scanned+=1
+            if handle not in self._active or handle in self._cancel:
+                self._active.discard(handle)
+                self._cancel.discard(handle)
+                continue
+            try:
+                result=callback(max(0,now-due))
+                executed+=1
+            except BaseException:
+                self._active.discard(handle)
+                self._cancel.discard(handle)
+                raise
             if interval and result is not False and handle not in self._cancel:
-                heapq.heappush(self._jobs,(time.monotonic()+interval,handle,callback,interval))
+                heapq.heappush(self._jobs,(time.monotonic()+interval,
+                                           handle,callback,interval))
+            else:
+                self._active.discard(handle)
             self._cancel.discard(handle)
-    def reset(self):self._jobs.clear();self._cancel.clear()
+        return executed
+
+    def reset(self):
+        self._jobs.clear()
+        self._cancel.clear()
+        self._active.clear()
+
 class _ClockHandle:
     def __init__(self,clock,handle):self.clock=clock;self.handle=handle
-    def cancel(self):self.clock._cancel.add(self.handle)
+    def cancel(self):
+        if self.handle in self.clock._active:
+            self.clock._cancel.add(self.handle)
 Clock=_Clock()
 
 class TermuxBackend:
@@ -419,6 +469,35 @@ class TermuxBackend:
                     child._applied_native_style['grid_position']=signature
 
     def _make(self,node,parent):
+        """Build a native view tree iteratively, with postorder finalization.
+
+        Preorder creates parents before children; postorder binds screen and
+        tab visibility only once native descendants exist. Child positions are
+        passed directly rather than found by repeated list.index() scans.
+        """
+        stack=[(node,parent,None,False)]
+        root_native=None
+        while stack:
+            current,native_parent,position,finish=stack.pop()
+            if finish:
+                self._finish_native(current)
+                continue
+            native,children_parent=self._make_one(current,native_parent,position)
+            if root_native is None:root_native=native
+            stack.append((current,None,None,True))
+            for index in range(len(current.children)-1,-1,-1):
+                stack.append((current.children[index],children_parent,index,False))
+        return root_native
+
+    def _finish_native(self,node):
+        from .advanced import ScreenManager,TabbedPanel
+        if isinstance(node,ResponsiveGrid):self._reflow_grid(node)
+        if isinstance(node,ScreenManager):
+            node._sync()
+            if isinstance(node,TabbedPanel) and node._tab_bar is not None and node.children:
+                node._tab_bar.selecttab([x.name for x in node.children].index(node.current))
+
+    def _make_one(self,node,parent,child_position):
         from .advanced import ScreenManager,TabbedPanel,Popup,RichTextLabel,InfiniteCanvas
         tg=self.tg;a=self.activity
         tab_content=None
@@ -551,12 +630,14 @@ class TermuxBackend:
                     native.setwidth(0);native.setlinearlayoutparams(weight)
                 elif not hasattr(node,'width'):
                     native.setwidth(0);native.setlinearlayoutparams(1)
-            position=node.parent.children.index(node)
+            position=(child_position if child_position is not None
+                      else node.parent.children.index(node))
             spacing=getattr(node.parent,'spacing',0)
             if spacing and position:
                 native.setmargin(int(spacing),'top' if node.parent.orientation=='vertical' else 'left')
         if isinstance(node.parent,GridLayout) and not isinstance(node.parent,ResponsiveGrid):
-            index=node.parent.children.index(node)
+            index=(child_position if child_position is not None
+                   else node.parent.children.index(node))
             rows=int(getattr(node,'row_span',1));cols=int(getattr(node,'col_span',1))
             ar=getattr(node,'align_row','center');ac=getattr(node,'align_col','center')
             allowed={'top','bottom','left','right','center','baseline','fill'}
@@ -571,13 +652,7 @@ class TermuxBackend:
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
         self._paint_node(node)
-        for child in node.children:self._make(child,tab_content if tab_content is not None else native)
-        if isinstance(node,ResponsiveGrid):self._reflow_grid(node)
-        if isinstance(node,ScreenManager):
-            node._sync()
-            if isinstance(node,TabbedPanel) and node._tab_bar is not None and node.children:
-                node._tab_bar.selecttab([x.name for x in node.children].index(node.current))
-        return native
+        return native,(tab_content if tab_content is not None else native)
     @staticmethod
     def _draw_canvas(node,buffer,canvas):
         node.render_to(canvas)
@@ -737,6 +812,9 @@ class TermuxBackend:
                     if event is None and not self._stop_requested:
                         time.sleep(0.01)
             finally:
+                # Cancel callbacks associated with this Activity before closing
+                # native views, avoiding stale timer writes after app shutdown.
+                Clock.reset()
                 # Relinquish C's exported mmap reference before closing the buffer.
                 for slider,buffer,canvas in reversed(self._slider_resources):
                     slider._slider_draw=None
