@@ -19,8 +19,8 @@ SCHEMA_VERSION=1
 MAX_JSON_BYTES=512*1024
 DEFAULT_CONFIG={
     "schema_version":SCHEMA_VERSION,
-    "ui":{"theme":"midnight","text_style":"body","orientation":"system",
-          "window_mode":"normal"},
+    "ui":{"theme":"midnight","text_style":"body","option_profile":"balanced",
+          "orientation":"system","window_mode":"normal"},
     "layout":{
         "columns":12,"grid_unit_dp":4,"touch_target_dp":48,
         "small_spacing_dp":8,"medium_spacing_dp":16,"large_spacing_dp":24,
@@ -87,15 +87,56 @@ def _merge(base,override,section="config"):
         else:base[name]=value
 
 
+def _apply_option_profile(settings):
+    """Apply selected profile ONLY to fields still equal to shipped defaults.
+
+    This preserves explicitly customized numeric values in the complete
+    generated config.json while allowing a single preset selector to change
+    the remaining default-valued settings. No implicit disk writes.
+    """
+    name=_safe_name(settings["ui"]["option_profile"])
+    path=config_home()/"options"/(name+".json")
+    if path.is_file():
+        entry=_read_json(path)
+        if set(entry)-{"name","settings"} or entry.get("name")!=name:
+            raise ValueError("invalid option profile file "+str(path))
+        options=entry.get("settings")
+    else:
+        if name not in OPTIONS:raise ValueError("unknown selected option profile: "+name)
+        options=OPTIONS[name]
+    if not isinstance(options,dict):raise ValueError("option profile settings must be an object")
+    if "schema_version" in options:raise ValueError("profile may not override schema_version")
+    if isinstance(options.get("ui"),dict) and "option_profile" in options["ui"]:
+        raise ValueError("profiles may not redirect other profiles")
+    changed=deepcopy(DEFAULT_CONFIG)
+    _merge(changed,options,"option profile")
+    def apply(current,profile,defaults):
+        for key,value in profile.items():
+            if isinstance(value,dict):
+                apply(current[key],value,defaults[key])
+            elif value!=defaults[key] and current[key]==defaults[key]:
+                current[key]=value
+    apply(settings,changed,DEFAULT_CONFIG)
+
+
 def validate_config(value):
-    """Validate strict types/ranges and return a fresh merged configuration."""
+    """Validate strict types/ranges and return effective, merged configuration."""
     if not isinstance(value,dict):raise ValueError("TGK configuration must be an object")
     config=deepcopy(DEFAULT_CONFIG)
     _merge(config,value)
+    _apply_option_profile(config)
     if type(config["schema_version"]) is not int or config["schema_version"]!=SCHEMA_VERSION:
         raise ValueError("unsupported TGK config schema_version")
     ui=config["ui"]
-    for key in ("theme","text_style"):_safe_name(ui[key])
+    for key in ("theme","text_style","option_profile"):_safe_name(ui[key])
+    from .theme import PRESETS as PALETTES
+    from .typography import PRESETS as TYPOGRAPHY
+    if ui["theme"] not in PALETTES and not (
+            config_home()/"palettes"/(ui["theme"]+".json")).is_file():
+        raise ValueError("unknown default palette: "+ui["theme"])
+    if ui["text_style"] not in TYPOGRAPHY and not (
+            config_home()/"text_styles"/(ui["text_style"]+".json")).is_file():
+        raise ValueError("unknown default typography: "+ui["text_style"])
     if ui["orientation"] not in ("system","portrait","landscape"):
         raise ValueError("ui.orientation must be system, portrait or landscape")
     if ui["window_mode"] not in ("normal","dialog","overlay"):
@@ -141,6 +182,53 @@ def load_config(path=None):
     except FileNotFoundError:return deepcopy(DEFAULT_CONFIG)
     if not path.is_file():raise ValueError("TGK config path is not a file")
     return deepcopy(_load_cached(str(path.resolve()),info.st_mtime_ns,info.st_size))
+
+
+def update_config(section,key,value):
+    """Atomically update one stored config key after full schema validation.
+
+    Only explicitly requested edits are persisted; unrelated theme/font
+    registry files are left unchanged. On any validation or I/O failure,
+    the previous configuration remains intact.
+    """
+    _safe_name(section)
+    _safe_name(key)
+    if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict):
+        raise ValueError("unknown config section: "+section)
+    if key not in DEFAULT_CONFIG[section]:
+        raise ValueError("unknown config field: "+section+"."+key)
+    root=config_home()
+    target=config_path()
+    if root.is_symlink() or target.is_symlink():
+        raise ValueError("refuse to update symlink configuration")
+    if not target.is_file():
+        raise FileNotFoundError("initialize configuration first: tgk config init")
+    raw=_read_json(target)
+    updated=deepcopy(DEFAULT_CONFIG)
+    _merge(updated,raw)
+    updated[section][key]=value
+    # Validation must complete BEFORE replacing the prior file.
+    validate_config(updated)
+    import tempfile
+    encoded=(json.dumps(updated,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode("utf-8")
+    fd,temp_path=tempfile.mkstemp(prefix=".config-",suffix=".json",dir=root)
+    try:
+        with os.fdopen(fd,"wb") as out:
+            out.write(encoded)
+            out.flush()
+            os.fsync(out.fileno())
+        os.chmod(temp_path,0o600)
+        if target.is_symlink():raise ValueError("refuse symlink configuration target")
+        os.replace(temp_path,target)
+    finally:
+        Path(temp_path).unlink(missing_ok=True)
+    _load_cached.cache_clear()
+    return load_config()
+
+
+def clear_config_cache():
+    """Force fresh reads after changes made by another process."""
+    _load_cached.cache_clear()
 
 
 def option_config(name):
