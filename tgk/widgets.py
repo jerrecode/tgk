@@ -673,7 +673,6 @@ class TermuxBackend:
         elif isinstance(node,ProgressBar):native=tg.ProgressBar(a,parent)
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
-        if interactive:self._refresh_touch_height(node)
         native_id=getattr(native,'id',None)
         if type(native_id) in (int,str):self._native_index[native_id]=node
         node._theme_hook=lambda changed,node=node: self.invalidate_style(node,changed)
@@ -748,6 +747,7 @@ class TermuxBackend:
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
         self._apply_size_spec(node)
+        if interactive:self._refresh_touch_height(node)
         self._paint_node(node)
         return native,(tab_content if tab_content is not None else native)
     @staticmethod
