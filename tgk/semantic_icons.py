@@ -33,9 +33,14 @@ _PATHS = {
     "check": "M4 12L9 17L20 6",
     "wrong": "M5 5L19 19 M19 5L5 19 M3 3H21V21H3Z",
     "close": "M5 5L19 19 M19 5L5 19",
+    "filter_clear": "M2 3H17L12 10V17L8 20V10Z M16 15L22 21 M22 15L16 21",
     "proceed": "M3 12H21 M14 5L21 12L14 19",
     "run": "M3 4H21V20H3Z",
     "loading": "M12 2A10 10 0 0 1 22 12 M12 22A10 10 0 0 1 2 12 M17 3L21 5L21 9",
+    "loading_0": "M12 2A10 10 0 0 1 22 12 M19 8L22 12L23 8",
+    "loading_1": "M22 12A10 10 0 0 1 12 22 M16 19L12 22L16 23",
+    "loading_2": "M12 22A10 10 0 0 1 2 12 M5 16L2 12L1 16",
+    "loading_3": "M2 12A10 10 0 0 1 12 2 M8 5L12 2L8 1",
     "home": "M3 11L12 3L21 11 M6 10V21H18V10 M10 21V14H14V21",
     "delete": "M4 6H20 M9 6V4H15V6 M6 6L7 21H17L18 6 M10 10V17 M14 10V17",
     "rename": "M3 5H13V9 M8 5V19 M3 15V19H13 M16 19L21 14L19 12L14 17L13 21Z",
@@ -65,6 +70,8 @@ _PATHS = {
     "sort_ascending": "M6 19V5 M2 9L6 5L10 9 M14 8H21 M14 12H19 M14 16H17",
     "sort_descending": "M6 5V19 M2 15L6 19L10 15 M14 8H17 M14 12H19 M14 16H21",
     "expand": "M5 8L12 15L19 8",
+    "chevron_left": "M15 4L7 12L15 20",
+    "chevron_right": "M9 4L17 12L9 20",
     "collapse": "M5 15L12 8L19 15",
     "left": "M19 12H5 M12 5L5 12L12 19",
     "right": "M5 12H19 M12 5L19 12L12 19",
@@ -99,8 +106,13 @@ _PATHS = {
     "video": "M3 5H17V19H3Z M17 10L22 7V17L17 14Z M8 9L13 12L8 15Z",
     "audio": "M4 9H9L14 5V19L9 15H4Z M17 9A5 5 0 0 1 17 15",
     "playlist": "M3 5H18 M3 10H18 M3 15H12 M16 14L22 17L16 20Z",
+    "catalogue": "M3 4H11L12 6L13 4H21V20H13L12 22L11 20H3Z M12 6V22 M5 9H9 M15 9H19",
+    "dictionary": "M4 3H18V20H4A2 2 0 0 1 4 16Z M4 16H18 M8 7H14 M11 7V13 M8 13H14",
     "repeat": "M5 8V6A3 3 0 0 1 8 3H18L21 6 M17 6H21V2 M19 16V18A3 3 0 0 1 16 21H6L3 18 M7 18H3V22",
+    "repeat_one": "M5 8V6A3 3 0 0 1 8 3H18L21 6 M17 6H21V2 M19 16V18A3 3 0 0 1 16 21H6L3 18 M7 18H3V22 M12 9V16 M10 11L12 9",
+    "repeat_off": "M5 8V6A3 3 0 0 1 8 3H18L21 6 M17 6H21V2 M19 16V18A3 3 0 0 1 16 21H6L3 18 M7 18H3V22 M3 3L21 21",
     "shuffle": "M3 5H7L17 19H21 M17 15L21 19L17 23 M3 19H7L17 5H21 M17 1L21 5L17 9",
+    "shuffle_off": "M3 5H7L17 19H21 M17 15L21 19L17 23 M3 19H7L17 5H21 M17 1L21 5L17 9 M3 3L21 21",
     "mute": "M3 9H8L13 5V19L8 15H3Z M17 9L22 15 M22 9L17 15",
     "headphones": "M4 13V12A8 8 0 0 1 20 12V13 M4 12H8V20H4Z M16 12H20V20H16Z",
     "microphone": "M9 4A3 3 0 0 1 15 4V13A3 3 0 0 1 9 13Z M5 12A7 7 0 0 0 19 12 M12 19V22 M8 22H16",
@@ -201,10 +213,15 @@ _assign("search", "search inspect")
 _assign("search_replace", "search_replace")
 _assign("check", "confirm acknowledge correct success")
 _assign("wrong", "wrong")
-_assign("close", "cancel close filter_clear")
+_assign("close", "cancel close")
+_assign("filter_clear", "filter_clear")
 _assign("proceed", "proceed continue goto")
 _assign("run", "run terminal console")
-_assign("loading", "loading loading_0 loading_1 loading_2 loading_3")
+_assign("loading", "loading")
+_assign("loading_0", "loading_0")
+_assign("loading_1", "loading_1")
+_assign("loading_2", "loading_2")
+_assign("loading_3", "loading_3")
 _assign("home", "home")
 _assign("delete", "delete")
 _assign("rename", "rename")
@@ -233,8 +250,10 @@ _assign("filter", "filter")
 _assign("sort", "sort")
 _assign("sort_ascending", "sort_ascending")
 _assign("sort_descending", "sort_descending")
-_assign("expand", "expand dropdown dropright")
-_assign("collapse", "collapse dropup dropleft")
+_assign("expand", "expand dropdown")
+_assign("chevron_right", "dropright")
+_assign("collapse", "collapse dropup")
+_assign("chevron_left", "dropleft")
 _assign("power", "exit")
 _assign("resize", "resize")
 _assign("maximize", "maximize")
@@ -261,9 +280,14 @@ _assign("step_backward", "back_one frame_backward")
 _assign("gallery", "gallery images")
 _assign("video", "videos")
 _assign("audio", "audios speaker volume")
-_assign("playlist", "playlist catalogue dictionary")
-_assign("repeat", "repeat_all repeat_one repeat_off")
-_assign("shuffle", "shuffle shuffle_off")
+_assign("playlist", "playlist")
+_assign("catalogue", "catalogue")
+_assign("dictionary", "dictionary")
+_assign("repeat", "repeat_all")
+_assign("repeat_one", "repeat_one")
+_assign("repeat_off", "repeat_off")
+_assign("shuffle", "shuffle")
+_assign("shuffle_off", "shuffle_off")
 _assign("mute", "mute")
 _assign("headphones", "headphones")
 _assign("microphone", "microphone")
@@ -311,8 +335,10 @@ _assign("brightness", "brightness")
 _assign("contrast", "contrast")
 _assign("opacity", "opacity")
 _assign("border", "border")
-_assign("left", "back left arrow_left chevron_left")
-_assign("right", "right arrow_right forward chevron_right")
+_assign("left", "back left arrow_left")
+_assign("chevron_left", "chevron_left")
+_assign("right", "right arrow_right forward")
+_assign("chevron_right", "chevron_right")
 _assign("up", "up arrow_up chevron_up")
 _assign("down", "down arrow_down chevron_down")
 _assign("grid", "dashboard grid_view")
@@ -361,7 +387,8 @@ def render_semantic_svg(name: str, *, size: int = 64, stroke: str = "#D5EFFF",
     result.append('<g transform="translate(4 4) scale(2.333333)" fill="none" '
                   f'stroke="{color}" stroke-width="1.7" '
                   'stroke-linecap="round" stroke-linejoin="round">')
-    result.append(f'<path d="{escape(outline, quote=True)}"/>')
+    path_fill = color if name == "star_filled" else "none"
+    result.append(f'<path d="{escape(outline, quote=True)}" fill="{path_fill}"/>')
     if motif in _ACCENTS:
         result.append(f'<path d="{escape(_ACCENTS[motif], quote=True)}" '
                       f'stroke="{accent_color}"/>')
