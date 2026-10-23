@@ -546,6 +546,34 @@ ZIP under that run's artifacts. All SVG samples are XML-validated in unit
 tests. Android native image controls still need PNG/JPEG bytes rather than
 SVG source: use the generated raster assets or a trusted on-device renderer.
 
+### Concurrent configuration edits (0.6.7)
+
+`patch_config()`, `update_settings()`, and `update_config()`
+now serialize concurrent edits from separate Termux sessions and Python
+processes. A private, stable `~/.config/tgk/.config.lock` file is
+protected by POSIX `flock` (on Android/Termux and Linux), and the lock
+covers the complete read → validate → merge → atomic rename transaction.
+The update either commits all requested fields or leaves the previous
+configuration intact. Acquiring the lock has a five-second default
+deadline; advanced callers may use
+`patch_config(changes, lock_timeout=2.0)` (0–60 seconds, exclusive).
+Lock release is automatic on process exit. File permissions are 0600;
+symbolic links and hard-linked lock files are rejected. Reinstallations
+still create only missing presets and do not overwrite edits.
+
+```python
+from tgk.config import patch_config
+patch_config({
+    "ui":{"theme":"ocean","text_style":"title_h2"},
+    "layout":{"touch_target_dp":56},
+    "io":{"workers":2}
+},lock_timeout=5.0)
+```
+
+This lock is specifically for TGK configuration writers using the TGK
+API. External programs that overwrite `config.json` without honoring the
+lock remain responsible for their own coordination.
+
 ## Persistent TGK configuration (0.6.0)
 
 `sh ./install.sh --copy` or `--editable` installs the framework and
