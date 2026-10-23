@@ -51,6 +51,8 @@ Slider:
 
 The custom slider uses a touch-sensitive ImageView, native shared memory, and the TGK C rasterizer because Termux:GUI does not expose an Android SeekBar. The automated touch simulation passes, but physical device behavior and screen density scaling still need testing.
 
+Slider drags follow one pointer ID until that finger lifts or the gesture is cancelled. Lifting another finger does not interrupt the drag. Batched motion uses the latest pointer frame, and malformed coordinates cannot capture a new drag or prevent its release. As specified by the [Termux:GUI touch protocol](https://github.com/termux/termux-gui/blob/main/Protocol.md#touch-events), ImageView coordinates already refer to image/buffer pixels; TGK does not rescale them using Android view dimensions.
+
 ### Direct TGK Python API
 
 ```python

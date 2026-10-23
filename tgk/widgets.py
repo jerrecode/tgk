@@ -328,25 +328,35 @@ class TermuxBackend:
             return
         if action not in ('down','pointer_down','move','up','pointer_up'):
             return
+        # ACTION_DOWN starts a new gesture, even if the previous stream lost
+        # its terminal event. ACTION_UP ends the gesture even with bad data.
+        owner=node._drag_pointer
+        if action in ('down','up'):
+            node._drag_pointer=None
         points=event.value.get('pointers',[])
         if isinstance(points,dict):points=[points]
         if isinstance(points,(list,tuple)) and points and isinstance(points[-1],(list,tuple)):
             points=points[-1]
         if not isinstance(points,(list,tuple)) or not points:
-            if action in ('up','pointer_up'):
-                node._drag_pointer=None
             return
         if action in ('down','pointer_down'):
             if node._drag_pointer is not None:return
-            index=event.value.get('index',0)
-            if not isinstance(index,int) or index<0 or index>=len(points):index=0
+            index=event.value.get('index',0) if action=='pointer_down' else 0
+            if type(index) is not int or not 0<=index<len(points):return
             chosen=points[index]
-            if not isinstance(chosen,dict):return
-            node._drag_pointer=chosen.get('id',0)
+        elif action=='pointer_up':
+            # The action index identifies the lifted pointer; releasing a
+            # different finger must neither move nor release the drag owner.
+            index=event.value.get('index')
+            if type(index) is not int or not 0<=index<len(points):return
+            chosen=points[index]
+            if not isinstance(chosen,dict) or owner is None or chosen.get('id',0)!=owner:return
+            node._drag_pointer=None
         else:
+            if owner is None:return
             chosen=next((p for p in points if isinstance(p,dict) and
-                         p.get('id',0)==node._drag_pointer),None)
-            if chosen is None:return
+                         p.get('id',0)==owner),None)
+        if not isinstance(chosen,dict):return
         # ImageView touch coordinates are already expressed in its image/buffer
         # pixel space by Termux:GUI. Scaling them with getdimensions() again
         # moves the thumb away from the finger on high-density screens.
@@ -356,12 +366,12 @@ class TermuxBackend:
             return
         if not math.isfinite(x):
             return
+        if action in ('down','pointer_down'):
+            node._drag_pointer=chosen.get('id',0)
         # Keep the track endpoints identical to those used by _draw_slider.
         left,right=22,512-23
         fraction=max(0.0,min(1.0,(x-left)/(right-left)))
         node.value=node.min+(node.max-node.min)*fraction
-        if action in ('up','pointer_up'):
-            node._drag_pointer=None
 
     def render(self,root):
         return self._make(root,None)
