@@ -565,6 +565,36 @@ python -m tgk.config path       # active config file location
 python -m tgk.config validate   # strict bounds/types validation
 ```
 
+TGK 0.6.3 also supports **explicitly pinned values**, including values
+equal to the original factory default. For example, setting workers to 2
+while `battery_saver` is selected keeps 2 workers until reset, even though
+the factory default is 2. Pin metadata is stored in `config.json` as a
+validated list of `section.field` keys and is backward-compatible with
+configurations that lack it.
+
+```sh
+python -m tgk.config set ui option_profile '"battery_saver"'
+python -m tgk.config set io workers 2
+python -m tgk.config reset io workers
+```
+
+Multiple fields can be updated **in one validated atomic transaction**:
+
+```python
+from tgk.config import update_settings
+settings=update_settings({
+    "ui":{"theme":"ocean","option_profile":"performance"},
+    "layout":{"touch_target_dp":64},
+    "io":{"workers":2}
+})
+update_settings({},reset=(("io","workers"),))
+```
+
+Legacy non-default values still override profiles. An explicit reset
+removes the corresponding pin and returns the field to profile inheritance.
+No implicit writes occur when reading configuration, and installer re-runs
+do not replace modified palette, typography or option files.
+
 TGK 0.6.2 additionally supports atomic, validated updates without opening
 `config.json` in a text editor:
 
