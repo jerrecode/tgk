@@ -159,6 +159,116 @@ The tests construct all 16 scenarios without Android and check callbacks,
 inherited palette semantics, invalid colors and live updates. Android device
 rendering and interaction remain unverified by Linux CI.
 
+## Advanced UI: screens, tabs, overlays, typography and icon catalog
+
+This experimental extension adds support for multi-view **screen navigation**
+and **tabbed views** without deleting/recreating child widgets on every tab switch.
+
+```python
+from tgk import (App, ScreenManager, Screen, TabbedPanel, Tab, Popup,
+                 InfiniteCanvas, RichTextLabel, TextSpan, IconLabel,
+                 resolve_text_style)
+
+screens=ScreenManager()
+for name in ("home","files","settings"):
+    screens.add_widget(Screen(name=name,title=name.title()))
+screens.switch("files")
+
+tabs=TabbedPanel()
+tabs.add_widget(Tab(name="editor",title="Editor"))
+tabs.add_widget(Tab(name="preview",title="Preview"))
+tabs.switch("preview")
+
+popup=Popup(visible=False,height=240,width=320)
+popup.open()       # setvisibility(VISIBLE), existing children retained
+popup.dismiss()    # setvisibility(GONE), does not destroy children
+
+canvas=InfiniteCanvas(width=512,height=384,zoom=1)
+canvas.add_marker(100,-40,role="accent")
+canvas.pan(32,0)
+canvas.zoom_at(1.5,256,192)
+```
+
+- `ScreenManager` / `PageView`: named views sharing one native
+  `FrameLayout`; selects one using native `setvisibility`.
+- `TabbedPanel`: Termux:GUI's native `TabLayout` and a `FrameLayout`.
+  Protocol `itemselected` messages select the matching tab content.
+- `Popup`: **in-Activity** popup view intended as a child of a `FloatLayout`;
+  shown/hidden without rebuilding. It is not yet a fully focus-trapping modal.
+- `App(window_mode="dialog")`: Android dialog-style Activity.
+  `App(window_mode="overlay")`: Android overlay Activity requiring the
+  **Termux:GUI Display over other apps** system permission. These are
+  *single-App* windows, not an unrestricted concurrent desktop window manager.
+  Starting separate Python processes can create independent Android Activities.
+- `InfiniteCanvas`: C-rendered 2D viewport with unbounded *logical* world
+  coordinates, pan, two-pointer pinch zoom, finite framebuffer (max 1 MP) and
+  up to 10,000 markers. Neither physical framebuffer nor marker count is
+  literally infinite; the viewport does not support arbitrary zoom or 3D.
+
+### Text presets and safe rich formatting
+
+Fifteen typography presets: `body` (default), `caption`, `small`,
+`subtitle`, `title`, `display`, `monospace`, `terminal`, `code`,
+`serif`, `quote`, `emphasis`, `warning`, `danger`, `muted`,
+and `link`. (This is **16** presets including body.)
+
+```python
+from tgk import App, TextStyle, TextSpan, RichTextLabel
+app=App(text_style="terminal")
+label=RichTextLabel(
+    spans=[TextSpan("Bold",style="title"),
+           TextSpan(" + italic",style="quote",color="#AE73FA")],
+    style="body",height=100)
+app.set_text_style("display")
+# Standard Label and TextInput native setters support size and color.
+# RichTextLabel implements mixed text styles using an isolated WebView.
+```
+
+Native Termux:GUI `TextView` has color, size and gravity setters but no
+general font-family/weight/italic/rich-span API. TGK uses validated HTML and
+CSS in a **JavaScript-disabled, navigation-disabled WebView** to provide font
+families (system sans, serif, mono), bold/italic, underline, strike-through,
+line height, alignment, mixed colors and safely escaped text. It deliberately
+does not load custom font files, remote resources or arbitrary user CSS.
+`App.set_text_style()` adjusts default native label size and color; for a
+RichTextLabel, use its `style` property or run the shared theme selector.
+
+### Semantic icons
+
+`tgk.icons.ICONS` contains hundreds of semantic names in six groups:
+`files`, `directories`, `actions`, `media`, `view`, `navigation`.
+Covers detailed programming/data/media/archive/package extensions, Linux
+filesystem directories, editing/actions, playback, viewport and settings.
+
+```python
+from tgk import icon_for_path, glyph, svg, IconLabel
+name=icon_for_path("records.jsonl",is_dir=False)  # jsonl
+print(name,glyph(name))
+icon=IconLabel(icon="folder",text="Documents",font_size=18)
+svg_text=svg("zoom_in",size=64,color="#18D0F9")
+```
+
+Unicode glyph labels depend on installed Android fonts and may vary by device.
+TGK also includes dependency-free vector SVG stroke paths for a smaller core
+icon subset; it **does not** yet bundle complete SVG paths for all named
+icons or install third-party fonts. SVG strings are assets, not native
+termuxgui.ImageView inputs; convert to PNG (for example with a trusted
+rasterizer) before passing to a native image viewer.
+
+### Run the composite Android lab
+
+```sh
+python examples/advanced_gui.py --theme ocean
+python examples/advanced_gui.py --theme paper --mode dialog
+# Requires overlay permission in Termux:GUI Android settings:
+python examples/advanced_gui.py --theme cyberpunk --mode overlay
+```
+
+The lab contains five native tabs: navigation, icon gallery, rich typography,
+pan/zoom C canvas, and a nested screen stack. It also includes an in-Activity
+popup. This source is independently unit-tested on Linux, but Android
+touch/overlay/TabLayout behavior is awaiting **real hardware validation**.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
