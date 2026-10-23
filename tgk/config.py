@@ -198,18 +198,41 @@ def _atomic_config_replace(changed,root,target):
     clear_config_cache()
 
 
-def update_config(section,key,value,*,reset=False):
-    """Atomically update one setting without replacing unrelated user presets.
+def update_settings(changes,*,reset=()):
+    """Apply a batch of setting changes atomically; no partial writes.
 
-    Profiles apply to unpinned defaults. Passing reset=True restores factory
-    inheritance, including any active option profile's chosen value.
+    changes is a dict mapping section names to field/value dictionaries.
+    Every explicitly assigned value is pinned even if equal to the factory
+    default. reset is a sequence of (section,key) tuples that restores
+    profile inheritance for that field.
     """
-    _safe_name(section)
-    _safe_name(key)
-    if section not in ("ui","layout","runtime","io","icons","tools"):
-        raise ValueError("unknown config section")
-    if key not in DEFAULT_CONFIG[section]:
-        raise ValueError("unknown config setting")
+    if not isinstance(changes,dict) or not changes and not reset:
+        raise ValueError("provide configuration changes or fields to reset")
+    normalized={}
+    for section,fields in changes.items():
+        _safe_name(section)
+        if section not in ("ui","layout","runtime","io","icons","tools"):
+            raise ValueError("unknown config section")
+        if not isinstance(fields,dict):
+            raise ValueError("setting changes must be grouped by section")
+        for key,value in fields.items():
+            _safe_name(key)
+            if key not in DEFAULT_CONFIG[section]:
+                raise ValueError("unknown config setting")
+        normalized[section]=fields
+    resets=[]
+    for item in reset:
+        if not isinstance(item,(tuple,list)) or len(item)!=2:
+            raise ValueError("reset entries must be (section,key)")
+        section,key=item
+        _safe_name(section);_safe_name(key)
+        if section not in DEFAULT_CONFIG or not isinstance(DEFAULT_CONFIG[section],dict) or key not in DEFAULT_CONFIG[section]:
+            raise ValueError("unknown reset setting")
+        resets.append((section,key))
+    if len(resets)!=len(set(resets)):
+        raise ValueError("duplicate reset setting")
+    if any(key in normalized.get(section,{}) for section,key in resets):
+        raise ValueError("cannot set and reset the same setting")
     root=config_home()
     target=config_path()
     if root.is_symlink() or target.is_symlink():
@@ -217,22 +240,30 @@ def update_config(section,key,value,*,reset=False):
     if not target.is_file():
         raise FileNotFoundError("initialize settings with python -m tgk.config init")
     raw=_read_json(target)
-    changed=validate_config(raw)
-    # Preserve the *stored* settings, not profile-inherited effective values.
+    validate_config(raw)
     changed=deepcopy(DEFAULT_CONFIG)
     _merge(changed,raw)
-    name=f"{section}.{key}"
     pins=set(changed["pinned"])
-    if reset:
+    for section,fields in normalized.items():
+        for key,value in fields.items():
+            changed[section][key]=value
+            pins.add(f"{section}.{key}")
+    for section,key in resets:
         changed[section][key]=DEFAULT_CONFIG[section][key]
-        pins.discard(name)
-    else:
-        changed[section][key]=value
-        pins.add(name)
+        pins.discard(f"{section}.{key}")
     changed["pinned"]=sorted(pins)
     validate_config(changed)
+    # Enforce profile existence before replacing the file. Never import or
+    # execute user presets; only bounded JSON is accepted.
+    option_config(changed["ui"]["option_profile"])
     _atomic_config_replace(changed,root,target)
     return load_config()
+
+
+def update_config(section,key,value,*,reset=False):
+    """Atomically set one persisted value or restore profile inheritance."""
+    if reset:return update_settings({},reset=((section,key),))
+    return update_settings({section:{key:value}})
 
 
 def option_config(name):
