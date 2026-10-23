@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.6.5:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.6.6:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
 
 ## Install on Android/Termux
 
@@ -29,6 +29,40 @@ python -m tgk.install_hook --remove
 # Run tests (can run on ordinary Linux without Android)
 make test
 ```
+
+### Update an existing installation
+
+From the retained TGK repository checkout, update to the verified `main`
+branch and reinstall with the **same Python interpreter** used for installation:
+
+```sh
+cd ~/tgk
+git switch main
+git pull --ff-only
+sh ./install.sh --copy
+python -m tgk.config validate
+python -c 'import tgk; print("TGK",tgk.__version__,tgk.__file__)'
+```
+
+For a development-only editable installation, use `sh ./install.sh --editable`
+instead and keep the checkout. The installer recompiles the C renderer for
+this device and creates **only missing** files in
+`${TGK_CONFIG_HOME:-${XDG_CONFIG_HOME:-~/.config}/tgk}`, preserving edited
+`config.json`, `palettes/`, `text_styles/` and `options/`. Back up these
+files before manually editing them. If `git pull --ff-only` reports local
+changes or a divergent branch, inspect `git status` and reconcile them
+instead of forcing a reset.
+
+With TGK Tools installed, check the Android service and the responsive UI:
+
+```sh
+tgk doctor --connect
+tgk layout-plan --connect --json
+tgk adaptive-demo --orientation system
+```
+
+Physical Android touch, insets and orientation behavior requires testing on
+the device; ordinary Linux CI does not establish that behavior.
 
 ### How the Kivy bridge behaves
 
