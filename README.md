@@ -66,7 +66,23 @@ instead and keep the checkout. The installer recompiles the C renderer for
 this device and creates **only missing** files in
 `${TGK_CONFIG_HOME:-${XDG_CONFIG_HOME:-~/.config}/tgk}`, preserving edited
 `config.json`, `palettes/`, `text_styles/` and `options/`. Back up these
-files before manually editing them. If `git pull --ff-only` reports local
+files before manually editing them. Icon assets are handled separately: a previous
+TGK-generated icon catalog is automatically refreshed when its manifest verifies
+that every generated asset remains unchanged and no user-owned files have been
+added. Modified, foreign or unverified icon catalogs are preserved unchanged;
+if you deliberately want to replace one, back it up and use
+`python -m tgk.icon_builder --output \"$TGK_CONFIG_HOME\" --overwrite`
+with the appropriate configuration path (by default `~/.config/tgk`).
+
+**Icon design:** file and directory icons retain composable silhouettes and
+extension labels; action, navigation, media and view icons use purpose-built
+SVG paths rather than a generic shield with abbreviated labels. In particular,
+refresh uses two separated circular arrows, sync combines overlapping files
+with small refresh arrows, run is a terminal window showing `>_`, cut uses
+scissors, and play/pause/stop use their conventional geometric controls.
+Generated SVG, PNG, JPEG and ICO files all derive from the same recipes.
+
+If `git pull --ff-only` reports local
 changes or a divergent branch, inspect `git status` and reconcile them
 instead of forcing a reset.
 
