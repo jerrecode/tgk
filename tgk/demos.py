@@ -26,6 +26,9 @@ SCENARIOS = {
     "11_stress": "Long nested scroll lists, state feedback and repeatability",
     "12_studio": "Comprehensive live theme studio and color-scale picker",
     "13_workbench": "Complex interactive control dashboard with theme switching",
+    "14_anchor_grid": "Nine-point grid anchoring, nested anchor cells and gravity",
+    "15_labyrinth": "Many-level nested grids, scrolling, layouts and callbacks",
+    "16_event_matrix": "Cross-linked sliders, modes, action matrices and state readout",
 }
 
 
@@ -213,6 +216,63 @@ class Laboratory(App):
             self.add_button(cell,"Action B",lambda i=i:self.announce(f"{i} B"))
             container.add_widget(cell)
         scroll.add_widget(container);root.add_widget(scroll)
+
+    def _build_anchor_grid(self,root):
+        root.add_widget(label("Three-by-three cell anchoring (not absolute FrameLayout)",
+                              height=58,halign="center"))
+        grid=GridLayout(cols=3,rows=3,height=345)
+        names=(("top-left","left","top"),("top-center","center","top"),
+               ("top-right","right","top"),("middle-left","left","center"),
+               ("center","center","center"),("middle-right","right","center"),
+               ("bottom-left","left","bottom"),("bottom-center","center","bottom"),
+               ("bottom-right","right","bottom"))
+        for index,(text,x,y) in enumerate(names):
+            cell=panel(colors={"surface":mix("#11394B","#6D4286",index/8)},padding=3)
+            self.add_button(cell,text,lambda text=text:self.announce("Anchor "+text),
+                            halign=x,valign=y)
+            grid.add_widget(cell)
+        root.add_widget(grid)
+
+    def _build_labyrinth(self,root):
+        scroller=ScrollView(weight=1)
+        stack=panel(spacing=4,padding=5)
+        for group in range(10):
+            container=panel(colors={"surface":mix("#273753","#7A4C95",group/10)})
+            container.add_widget(label(f"Nested group {group:02d}",height=35))
+            grid=GridLayout(cols=3,rows=3,height=270)
+            for cell in range(9):
+                nested=panel("horizontal" if cell%2 else "vertical",
+                             padding=2,spacing=2)
+                self.add_button(nested,f"{group}:{cell}",lambda g=group,c=cell:
+                                self.announce(f"Nested group {g} cell {c}"))
+                grid.add_widget(nested)
+            container.add_widget(grid);stack.add_widget(container)
+        scroller.add_widget(stack);root.add_widget(scroller)
+
+    def _build_event_matrix(self,root):
+        root.add_widget(label("Tap matrix actions, drag control, switch modes",height=47))
+        self.matrix_state=label("Selected: none | intensity: 50",height=48)
+        root.add_widget(self.matrix_state)
+        matrix=GridLayout(cols=4,rows=3,height=235)
+        for idx in range(12):
+            self.add_button(matrix,f"Key {idx+1}",lambda idx=idx:self._matrix_event(idx))
+        root.add_widget(matrix)
+        intensity=Slider(min=0,max=100,value=50,step=1)
+        intensity.bind(value=lambda _sender,value:self._matrix_intensity(value))
+        root.add_widget(intensity)
+        self.matrix_progress=ProgressBar(value=50,height=27)
+        root.add_widget(self.matrix_progress)
+        root.add_widget(CheckBox(text="Live validation",active=True,height=46))
+
+    def _matrix_event(self,index):
+        self.counter+=1
+        self.matrix_state.text=f"Selected: {index+1} | actions: {self.counter}"
+        self.announce(f"Action {index+1} reached root")
+
+    def _matrix_intensity(self,value):
+        self.matrix_progress.value=value
+        self.matrix_state.text=f"Intensity: {value:.0f}"
+        self.announce(f"Intensity changed: {value:.0f}")
 
     def _studio(self,workbench=False):
         root=self._root("TGK Theme Studio" if not workbench else "TGK Interactive Workbench")
