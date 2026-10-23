@@ -106,7 +106,7 @@ class NativeTreeTests(unittest.TestCase):
         backend.activity=FakeTG.Activity(None)
         backend.render(root)
         self.assertEqual(len(backend.nodes),121)
-        self.assertFalse(hasattr(root.children[0]._native,"setmargin_value"))
+        self.assertNotIn("setmargin_value",root.children[0]._native.__dict__)
         self.assertEqual(root.children[119]._native.setmargin_value,(3,'top'))
 
     def test_grid_positions_are_bounded_and_stable(self):
