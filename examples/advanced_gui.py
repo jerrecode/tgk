@@ -16,7 +16,9 @@ from tgk import (
 
 class AdvancedLab(App):
     def build(self):
-        root=FloatLayout()
+        from tgk.layout_helpers import compact_action_bar
+        root=BoxLayout(orientation="vertical")
+        layer=FloatLayout(weight=1)
         self.tabs=TabbedPanel(height=740)
         self.message=Label(text="Explore tabs, then open the popup.",height=42)
         main=self._make_home()
@@ -25,7 +27,7 @@ class AdvancedLab(App):
         self.tabs.add_widget(self._make_typography())
         self.tabs.add_widget(self._make_canvas())
         self.tabs.add_widget(self._make_pages())
-        root.add_widget(self.tabs)
+        layer.add_widget(self.tabs)
 
         self.popup=Popup(visible=False,width=320,height=230,
                          background_color="#29395B",padding=8,spacing=6)
@@ -36,11 +38,14 @@ class AdvancedLab(App):
                  "It remains allocated while hidden, with no destructive rebuild.",
             style="small",height=95))
         self._button(self.popup,"Dismiss",self.popup.dismiss)
-        root.add_widget(self.popup)
+        layer.add_widget(self.popup)
+        root.add_widget(layer)
+        root.add_widget(compact_action_bar("Close",self.stop,margin=12))
         return root
 
     def _button(self,group,text,callback):
-        b=Button(text=text,height=48)
+        from tgk.layout_helpers import action_width
+        b=Button(text=text,height=48,width=action_width(text))
         b.bind(on_release=lambda *_:callback())
         group.add_widget(b)
         return b
@@ -54,7 +59,6 @@ class AdvancedLab(App):
         self._button(tab,"Cycle Palette",self.cycle_theme)
         self._button(tab,"Go to Icon Catalog",lambda:self.tabs.switch("icons"))
         self._button(tab,"Go to Infinite Canvas",lambda:self.tabs.switch("canvas"))
-        self._button(tab,"Close Window",self.stop)
         return tab
 
     def cycle_theme(self):

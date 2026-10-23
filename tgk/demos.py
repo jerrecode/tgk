@@ -68,7 +68,9 @@ class Laboratory(App):
         super().__init__(**kwargs)
 
     def add_button(self,container,title,callback,**kwargs):
-        button=Button(text=title,height=kwargs.pop("height",52),**kwargs)
+        from .layout_helpers import action_width
+        width=kwargs.pop("width",action_width(title,maximum=224))
+        button=Button(text=title,height=kwargs.pop("height",48),width=width,**kwargs)
         button.bind(on_release=lambda *_:callback())
         container.add_widget(button)
         return button
@@ -87,8 +89,17 @@ class Laboratory(App):
         return root
 
     def _footer(self,root):
+        from .layout_helpers import compact_action_bar
+        # Ordinary scenarios can exceed a phone's content height. Scroll the
+        # content while keeping the status and Close controls anchored below.
+        if not any(isinstance(child,ScrollView) for child in root.children):
+            container=panel(padding=0,spacing=0)
+            scroller=ScrollView(weight=1)
+            scroller.add_widget(root)
+            container.add_widget(scroller)
+            root=container
         root.add_widget(self.status)
-        self.add_button(root,"Close",self.stop)
+        root.add_widget(compact_action_bar("Close",self.stop,margin=12))
         return root
 
     def build(self):

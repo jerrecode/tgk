@@ -179,6 +179,8 @@ class Spinner(Label):
         super().__init__(text=text,values=list(values),**kwargs)
 class ToggleButton(Button):
     def __init__(self,text='',state='normal',**kwargs):
+        from .layout_helpers import action_width
+        kwargs.setdefault('width',action_width(text or 'Toggle'))
         super().__init__(text=text,state=state,**kwargs)
 class ProgressBar(Widget):
     def __init__(self,value=0,max=100,**kwargs):super().__init__(value=value,max=max,**kwargs)
@@ -439,9 +441,15 @@ class TermuxBackend:
         for node in tuple(self.nodes):self._paint_node(node)
 
     def apply_theme(self,theme=None):
-        """Recolor existing Views and redraw sliders, preserving local overrides."""
-        from .theme import resolve_theme
+        """Synchronize the Android Activity backdrop and every widget palette.
+
+        The Activity's window background can remain visible around transparent
+        children, margins and transitions even when the root view is repainted.
+        """
+        from .theme import resolve_theme,apply_activity_theme
         if theme is not None:self.theme=resolve_theme(theme)
+        if self.activity is not None:
+            apply_activity_theme(self.activity,self.theme)
         for node in tuple(self.nodes):self._paint_node(node)
 
     def refresh_screen_metrics(self):
@@ -615,6 +623,12 @@ class TermuxBackend:
             else:requested=max(float(requested),minimum)
         if requested is not None:native.setheight(int(math.ceil(requested)))
         if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
+        if node.parent is None:
+            # Fill the Activity content viewport instead of leaving a
+            # WRAP_CONTENT gap showing the old startup window color. The
+            # protocol accepts the literal constant even with simple mocks.
+            if not hasattr(node,'width'):native.setwidth('MATCH_PARENT')
+            if not hasattr(node,'height'):native.setheight('MATCH_PARENT')
         if isinstance(node.parent,BoxLayout):
             weight=getattr(node,'weight',None)
             if weight is not None and (isinstance(weight,bool) or not isinstance(weight,int) or weight<0):
