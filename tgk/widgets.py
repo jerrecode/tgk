@@ -818,6 +818,8 @@ class TermuxBackend:
                 apply_activity_theme(self.activity,self.theme)
                 self.render(root)
                 if on_start: on_start()
+                from .config import get_config
+                backend_options=get_config()['backend']
                 running=True
                 while running and not self._stop_requested:
                     event=c.checkevent()
@@ -825,9 +827,6 @@ class TermuxBackend:
                         self.event(event)
                         if event.type=='destroy' and event.value.get('finishing',False):
                             running=False
-                    from .config import get_config
-                    # Cached by config mtime; changes become active on the next loop.
-                    backend_options=get_config()['backend']
                     Clock.tick(max_callbacks=backend_options['clock_callbacks_per_tick'])
                     if event is None and not self._stop_requested:
                         time.sleep(backend_options['idle_sleep_seconds'])
