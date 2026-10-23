@@ -90,7 +90,7 @@ def resolve_component_style(name,**overrides):
     if name not in DEFAULT_STYLES:raise ValueError("unknown component style "+str(name))
     return DEFAULT_STYLES[name].override(**overrides) if overrides else DEFAULT_STYLES[name]
 
-def table_html(rows,theme=None,style=None,max_cells=20000):
+def table_html(rows,theme=None,style=None,max_cells=5000,max_text_chars=300_000):
     """Escape data and render a bounded, local CSP-only HTML table."""
     from .theme import get_theme,normalize_color,blend_color
     theme=theme or get_theme()
@@ -100,6 +100,7 @@ def table_html(rows,theme=None,style=None,max_cells=20000):
     if len(rows)>max_cells:raise ValueError("too many table rows")
     width=None
     total=0
+    text_used=0
     body=[]
     for ri,row in enumerate(rows):
         if not isinstance(row,(tuple,list)):raise TypeError("table row must be list or tuple")
@@ -111,6 +112,10 @@ def table_html(rows,theme=None,style=None,max_cells=20000):
         for ci,value in enumerate(row):
             if not isinstance(value,(int,float,bool,str)) and value is not None:
                 raise TypeError("table cells must be scalar values")
+            cell_text="" if value is None else str(value)
+            text_used+=len(cell_text)
+            if text_used>max_text_chars:
+                raise ValueError("maximum table text size exceeded")
             role="table_background"
             if style.shade_alternate_rows and ri%2:role="table_row_alt"
             if style.shade_alternate_columns and ci%2:
@@ -124,7 +129,7 @@ def table_html(rows,theme=None,style=None,max_cells=20000):
             bold=(ri==0 and style.bold_first_row) or (ci==0 and style.bold_first_column)
             top+=f"padding:{style.cell_padding_dp:g}px;font-weight:{700 if bold else 400};"
             tag="th" if bold else "td"
-            cells.append(f'<{tag} style="{top}">'+escape("" if value is None else str(value))+f'</{tag}>')
+            cells.append(f'<{tag} style="{top}">'+escape(cell_text)+f'</{tag}>')
         body.append("<tr>"+''.join(cells)+"</tr>")
     from .theme import normalize_color
     css="body{margin:0;background:"+normalize_color(theme["background"])+";color:"+normalize_color(theme["table_text"])+";font-family:sans-serif}table{border-collapse:collapse;width:100%;table-layout:auto}td,th{overflow-wrap:anywhere}"
