@@ -153,13 +153,20 @@ class GridLayout(Widget):
         if not cols and not rows: raise ValueError('cols or rows required')
         super().__init__(cols=cols,rows=rows,**kwargs)
 class ResponsiveGrid(GridLayout):
-    """12-column adaptive GridLayout; spans may vary by compact/medium/expanded width.
+    """Responsive grid with physical columns and logical design-span units.
 
-    Android updates positions in-place using setgridlayoutparams on config events.
-    It does not reconstruct native Views or change a GridLayout's column count.
+    Defaults to the configured LayoutScale.columns (12 unless overridden).
+    Span specifications retain a 12-unit basis by default, so adjusting the
+    physical column count doesn't invalidate existing demos.
     """
-    def __init__(self,**kwargs):
-        super().__init__(cols=12,rows=kwargs.pop('rows',0),**kwargs)
+    def __init__(self,cols=None,span_units=12,**kwargs):
+        from .config import configured_layout_scale
+        if cols is None:cols=configured_layout_scale().columns
+        if type(cols) is not int or not 1<=cols<=32:raise ValueError('cols must be 1..32')
+        if type(span_units) is not int or not 1<=span_units<=32:
+            raise ValueError('span_units must be 1..32')
+        super().__init__(cols=cols,rows=kwargs.pop('rows',0),
+                         span_units=span_units,**kwargs)
 
 class FloatLayout(Widget): pass # native FrameLayout, limited Kivy positioning
 class ScrollView(Widget): pass
@@ -466,12 +473,15 @@ class TermuxBackend:
         for node in tuple(self.nodes):
             if isinstance(node,ResponsiveGrid):
                 self._reflow_grid(node)
+            if getattr(node,'size_spec',None) is not None:
+                self._apply_size_spec(node)
         return measured
 
     def _reflow_grid(self,node):
         from .adaptive import arrange_spans,ScreenMetrics
         metrics=self.screen_metrics or ScreenMetrics(393,852)
-        positions=arrange_spans(node.children,columns=12,metrics=metrics)
+        positions=arrange_spans(node.children,columns=int(node.cols),metrics=metrics,
+                                logical_columns=int(node.span_units))
         for child,(row,col,rows,cols) in zip(node.children,positions):
             native=child._native
             if native is not None:
@@ -479,6 +489,25 @@ class TermuxBackend:
                 if child._applied_native_style.get('grid_position')!=signature:
                     native.setgridlayoutparams(row,col,rows,cols,'fill','fill')
                     child._applied_native_style['grid_position']=signature
+
+    def _apply_size_spec(self,node):
+        from .sizing import SizeSpec,resolve_size
+        spec=getattr(node,'size_spec',None)
+        if spec is None:return
+        if not isinstance(spec,SizeSpec):
+            raise TypeError('size_spec must be a SizeSpec')
+        if self.screen_metrics is None or node._native is None:return
+        interactive=isinstance(node,(Button,TextInput,CheckBox,Switch,Spinner,Slider))
+        resolved=resolve_size(spec,self.screen_metrics,
+                              touch_target_dp=self.layout_scale.touch_target_dp,
+                              interactive=interactive,
+                              intrinsic_width_dp=getattr(node,'width',None),
+                              intrinsic_height_dp=getattr(node,'height',None))
+        if resolved.width_dp is not None:
+            self._cached_set(node,'spec_width','setwidth',resolved.width_dp)
+        if resolved.height_dp is not None:
+            self._cached_set(node,'spec_height','setheight',resolved.height_dp)
+        return resolved
 
     def _make(self,node,parent):
         """Build a native view tree iteratively, with postorder finalization.
@@ -669,6 +698,7 @@ class TermuxBackend:
             native.setmargin(int(component.margin_dp))
         if isinstance(node,Popup):
             native.setvisibility(2 if node.visible else 0)
+        self._apply_size_spec(node)
         self._paint_node(node)
         return native,(tab_content if tab_content is not None else native)
     @staticmethod
