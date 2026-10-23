@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.4.0:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.6.5:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
 
 ## Install on Android/Termux
 
@@ -684,3 +684,34 @@ Packaging regression tests require pip, setuptools and wheel in the test interpr
 See [AGENTS.md](AGENTS.md) for engineering priorities and constraints.
 
 MIT license. Originated from two Termux:GUI probes; development is experimental and should be evaluated on real Android devices before relying on it for production applications.
+
+## Configurable responsive native column counts (0.6.5)
+
+`LayoutScale(columns=N)` now affects the **actual native** `ResponsiveGrid`
+column count (N=1..32), instead of being ignored by a hardcoded 12-column
+Android GridLayout. Existing 12-unit responsive spans remain compatible:
+12/6/4 logical units map to 6/3/2 real columns when `columns=6`.
+Explicit `ResponsiveGrid(cols=N)` overrides an application's configured
+column count. `span_units` controls the virtual design grid independently.
+
+```python
+from tgk import App,ResponsiveGrid,Button,LayoutScale
+
+# Inside an App.build() implementation:
+grid=ResponsiveGrid(span_units=12)
+for i in range(12):
+    grid.add_widget(Button(text=f"Item {i}",span_compact=12,
+                           span_medium=6,span_expanded=4))
+# App(layout_scale=LayoutScale(columns=6)) maps 12 units to 6 real columns.
+```
+
+Python helpers `ScreenMetrics.dp_to_px()`, `sp_to_px()` and `px_to_dp()`
+respect Android density and font scale without pretending to report physical
+panel resolution. `LayoutScale.gutter()` reduces column gaps on narrow
+screens, reserving most of the content width for actual cells. Explicit widths
+and heights of interactive native Views now respect the configured touch
+target minimum, unless `allow_small_touch_target=True` is specified.
+
+Use `tgk layout-plan --columns 6 --span-units 12 --width-dp 393
+--height-dp 852 --json` with TGK Tools >=0.6.3 to preview the same grid
+mapping without starting the Android UI.
