@@ -153,13 +153,33 @@ class GridLayout(Widget):
         if not cols and not rows: raise ValueError('cols or rows required')
         super().__init__(cols=cols,rows=rows,**kwargs)
 class ResponsiveGrid(GridLayout):
-    """12-column adaptive GridLayout; spans may vary by compact/medium/expanded width.
+    """Responsive grid with configurable native columns and logical span units.
 
-    Android updates positions in-place using setgridlayoutparams on config events.
-    It does not reconstruct native Views or change a GridLayout's column count.
+    Legacy span_compact=12/medium=6/expanded=4 remains valid when native
+    columns change (e.g. 12 logical units mapped into 6 physical columns).
     """
-    def __init__(self,**kwargs):
-        super().__init__(cols=12,rows=kwargs.pop('rows',0),**kwargs)
+    def __init__(self,cols=None,span_units=12,**kwargs):
+        if cols is not None and (type(cols) is not int or not 1<=cols<=32):
+            raise ValueError("ResponsiveGrid.cols must be within 1..32")
+        if type(span_units) is not int or not 1<=span_units<=32:
+            raise ValueError("span_units must be within 1..32")
+        object.__setattr__(self,'_responsive_ready',False)
+        object.__setattr__(self,'_syncing_columns',False)
+        object.__setattr__(self,'_explicit_columns',cols is not None)
+        object.__setattr__(self,'span_units',span_units)
+        super().__init__(cols=12 if cols is None else cols,
+                         rows=kwargs.pop('rows',0),**kwargs)
+        object.__setattr__(self,'_responsive_ready',True)
+
+    def __setattr__(self,name,value):
+        if name=='cols' and getattr(self,'_responsive_ready',False):
+            if type(value) is not int or not 1<=value<=32:
+                raise ValueError("ResponsiveGrid.cols must be within 1..32")
+            if getattr(self,'_native',None) is not None and value!=self.cols:
+                raise RuntimeError("native GridLayout columns cannot change after rendering")
+            if not self._syncing_columns:
+                object.__setattr__(self,'_explicit_columns',True)
+        super().__setattr__(name,value)
 
 class FloatLayout(Widget): pass # native FrameLayout, limited Kivy positioning
 class ScrollView(Widget): pass
@@ -471,7 +491,8 @@ class TermuxBackend:
     def _reflow_grid(self,node):
         from .adaptive import arrange_spans,ScreenMetrics
         metrics=self.screen_metrics or ScreenMetrics(393,852)
-        positions=arrange_spans(node.children,columns=12,metrics=metrics)
+        positions=arrange_spans(node.children,columns=int(node.cols),
+                                span_units=node.span_units,metrics=metrics)
         for child,(row,col,rows,cols) in zip(node.children,positions):
             native=child._native
             if native is not None:
@@ -547,6 +568,10 @@ class TermuxBackend:
         elif isinstance(node,BoxLayout):
             native=tg.LinearLayout(a,parent,vertical=node.orientation=='vertical')
         elif isinstance(node,GridLayout):
+            if isinstance(node,ResponsiveGrid) and not node._explicit_columns:
+                object.__setattr__(node,'_syncing_columns',True)
+                try:node.cols=self.layout_scale.columns
+                finally:object.__setattr__(node,'_syncing_columns',False)
             cols=int(node.cols or max(1,(len(node.children)+int(node.rows)-1)//int(node.rows)))
             rows=len(node.children) if isinstance(node,ResponsiveGrid) else int(
                 node.rows or (len(node.children)+cols-1)//cols)
@@ -626,7 +651,11 @@ class TermuxBackend:
                 requested=max(72,minimum) if isinstance(node,Slider) else minimum
             else:requested=max(float(requested),minimum)
         if requested is not None:native.setheight(int(math.ceil(requested)))
-        if hasattr(node,'width') and node.width is not None:native.setwidth(int(node.width))
+        requested_width=getattr(node,'width',None)
+        if interactive and requested_width is not None and not getattr(node,'allow_small_touch_target',False):
+            minimum_width=component.min_touch_dp if component is not None else self.layout_scale.touch_target_dp
+            requested_width=max(float(requested_width),minimum_width)
+        if requested_width is not None:native.setwidth(int(math.ceil(requested_width)))
         if node.parent is None:
             # Fill the Activity content viewport instead of leaving a
             # WRAP_CONTENT gap showing the old startup window color. The
