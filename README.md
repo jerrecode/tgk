@@ -760,6 +760,26 @@ keeps the current instance's typography; use `App.set_text_style("body")`
 to deliberately reset to the body preset. Specifying an explicit style or
 per-widget override remains higher priority than saved global defaults.
 
+### Audit every installed preset before selecting it
+
+`python -m tgk.config audit` scans all installed palettes, typography
+and option-profile JSON files, including profiles that are not currently
+active. It checks schema, colors, font settings, value ranges, file count
+and completeness of the shipped preset set. The audit is read-only and
+rejects symlinked preset files. Input files are capped at 512 KiB each
+and the default audit accepts at most 2,000 files.
+
+```sh
+python -m tgk.config init
+python -m tgk.config audit
+tgk config audit --compact
+```
+
+This augments the existing `config validate`, which checks the saved
+configuration currently in use. A damaged inactive preset no longer stays
+undetected until a user selects it. Existing customizations are retained;
+audit failures do not reset or overwrite them.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
