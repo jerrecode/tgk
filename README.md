@@ -512,6 +512,56 @@ ZIP under that run's artifacts. All SVG samples are XML-validated in unit
 tests. Android native image controls still need PNG/JPEG bytes rather than
 SVG source: use the generated raster assets or a trusted on-device renderer.
 
+## Persistent configuration and editable presets (TGK 0.6.0)
+
+TGK initializes its user-owned, platform-neutral configuration during
+`sh ./install.sh`. The directory is `$TGK_CONFIG_DIR` when set, otherwise
+`$XDG_CONFIG_HOME/tgk`, otherwise `~/.config/tgk`. Ordinary module imports
+never write configuration files. Installation creates **only missing files**;
+reinstalling does not overwrite your manual edits.
+
+```text
+~/.config/tgk/
+  config.json              # core system and default selections
+  palettes/midnight.json   # + all built-in palette presets
+  palettes/ocean.json
+  typography/body.json     # + all built-in font/text presets
+  typography/title_h3.json
+  options/layout.json      # + backend, io, icons and other component options
+  options/backend.json
+  options/button.json
+  options/table.json
+```
+
+`config.json` has validated sections `defaults` (theme and text_style),
+`window` (Activity type and orientation),
+`layout` (12 columns, dp spacing/gutters, touch target),
+`backend` (bounded Clock callback budget and idle sleep),
+`io` (chunk/total limits, timeout, worker counts) and `icons`
+(resolution tiers and maximum pack size). All are initialized with
+working factory defaults. The per-preset files are human-editable JSON.
+Palette files may override individual semantic roles, while typography files
+override validated font/style parameters. The `options/` files are editable
+templates of component styling; `config.json` remains the **live source
+of system/default settings**, so editing a component options template
+does not by itself change all UI widgets.
+
+```sh
+python -m tgk.config init   # safely recreate missing catalog entries
+python -m tgk.config show   # validate and print the active config
+```
+
+Defaults are applied consistently for new `App()` and bare
+`TermuxBackend()` instances. **Explicit application constructor values
+and explicit CLI flags always win** over saved defaults; per-object styling
+overrides always win over inherited theme values. A ContextVar theme/text
+selection overrides the persisted process default. Invalid config files
+produce actionable errors instead of silently replacing user data.
+
+The native event loop uses the configured callback budget; `Clock.tick()`
+remains explicitly adjustable. This facility does not give unsupported
+Android APIs arbitrary hardware FPS, color-depth, or true window inset data.
+
 ## Shell tools
 
 GUI-first utilities such as `prompt`, `confirm`, `choose`, `show`, `files`, `image`, `progress`, `canvas-demo` and `doctor` are developed and distributed **separately** in [tgk-tools](https://github.com/jerrecode/tgk-tools). Install `tgk` first, then `tgk-tools`.
