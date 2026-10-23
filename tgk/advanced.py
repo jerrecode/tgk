@@ -34,7 +34,8 @@ class ScreenManager(Widget):
         if not isinstance(name,str) or name not in (c.name for c in self.children):
             raise ValueError("unknown screen: "+str(name))
         self.current=name
-        if self._sync_views:self._sync_views()
+        # Keep model visibility synchronized even before Android rendering.
+        self._sync()
         self.dispatch("on_switch",name)
         return name
 
@@ -89,12 +90,10 @@ class Popup(BoxLayout):
         super().__init__(orientation=kwargs.pop("orientation","vertical"),
                          visible=bool(visible),**kwargs)
     def open(self):
-        self.visible=True
-        if self._native is not None:self._native.setvisibility(2)
+        self.visible=True  # Widget._update_native handles native visibility
         self.dispatch("on_open")
     def dismiss(self):
-        self.visible=False
-        if self._native is not None:self._native.setvisibility(0)
+        self.visible=False  # Widget._update_native handles native visibility
         self.dispatch("on_dismiss")
 
 class RichTextLabel(Widget):
