@@ -290,13 +290,21 @@ def _raster_backend():
     return cairosvg,Image
 
 
-def build_assets(output_root,*,names=None,raster=False,overwrite=False,
-                 low=32,mid=96,high=256,max_icons=1500):
+def build_assets(output_root,*,names=None,raster=None,overwrite=False,
+                 low=None,mid=None,high=None,max_icons=None):
     """Build EVERYTHING in staging first; atomically publish only on success.
 
     output_root/icons/{svg,ico,low_res,mid_res,high_res}. The raster folders
     exist but remain empty for a deterministic SVG-only run.
     """
+    from .config import load_config
+    saved=load_config()["icons"]
+    if raster is None:raster=saved["raster"]
+    if low is None:low=saved["low"]
+    if mid is None:mid=saved["mid"]
+    if high is None:high=saved["high"]
+    if max_icons is None:max_icons=saved["max_icons"]
+    if type(raster) is not bool:raise ValueError("raster must be boolean")
     if type(max_icons) is not int or not 1<=max_icons<=5000:
         raise ValueError("max_icons must be in 1..5000")
     sizes=(low,mid,high)
