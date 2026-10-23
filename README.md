@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.4.0:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.6.0:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
 
 ## Install on Android/Termux
 
@@ -581,6 +581,47 @@ The default icon-export resolutions are read from `config.json` by
 `build_assets` unless explicit `low/mid/high` values are supplied.
 The C renderer and FFprobe remain optional separate runtime dependencies;
 no untrusted JSON is executed as Python code.
+
+## Persistent user configuration and generated presets (0.6.0)
+
+Install or upgrade TGK with `sh ./install.sh --copy`. The installer
+initializes the following **user-owned JSON files** (not the Git checkout):
+
+```
+~/.config/tgk/config.json
+~/.config/tgk/presets/colors.json
+~/.config/tgk/presets/typography.json
+~/.config/tgk/presets/options.json
+```
+
+Set `TGK_CONFIG_HOME=/path/to/config` to move this directory, or set
+`XDG_CONFIG_HOME` to relocate the XDG parent. Existing files are **never
+overwritten** on reinstall, so customized presets remain intact.
+Initialization is opt-in via installer or `python -m tgk.config init --json`;
+plain `import tgk` is read-only and works without pre-created files.
+
+The config provides defaults for **palette, typography, option profile,
+orientation and Activity window mode**, 12-column layout sizing/touch target
+and spacing overrides, bounded Clock dispatch budgets and idle polling, I/O
+limits, target frame rate, canvas budget and icon output resolution tiers.
+Preset selections are inherited by new `App()` instances and the TGK
+backend. Explicit per-instance theme/style/layout options always override
+persistent defaults. In the same process, after manually editing JSON,
+call `tgk.config.clear_cache()` before creating another App.
+
+```sh
+python -m tgk.config init --json
+python -m tgk.config validate --json
+python -m tgk.config show --json
+python -m tgk.config paths --json
+```
+
+Available option profiles: `balanced`, `compact`, `accessible`,
+`performance`, `battery_saver` and `large_screen`. Theme and typography
+catalogs contain each built-in preset and can be extended with validated
+custom names. The configuration is per Python user, not a global Android
+setting. The native Termux:GUI backend still cannot infer unavailable
+hardware refresh-rate, color-depth or system-inset measurements.
 
 ## Shell tools
 
