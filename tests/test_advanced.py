@@ -127,6 +127,32 @@ class TypographyTests(unittest.TestCase):
         widget.text="Second"
         self.assertIn("Second",widget._native.rendered)
 
+class WindowTests(unittest.TestCase):
+    def test_overlay_event_loop_exits_without_destroy_event(self):
+        FakeTG.views=[];FakeTG.events=[];FakeTG.count=0
+        backend=TermuxBackend(tg=FakeTG,window_mode="overlay")
+        root=Label(text="Overlay")
+        backend.run(root,on_start=backend.stop)
+        self.assertIsNone(backend.activity)
+        self.assertIsNone(root._native)
+        self.assertTrue(backend._stop_requested)
+
+    def test_rich_text_uses_inherited_text_style(self):
+        from tgk.typography import resolve_text_style
+        backend=TermuxBackend(tg=FakeTG,text_style="title")
+        node=RichTextLabel(text="Inherit")
+        class Web:
+            markup=""
+            def setdata(self,source):self.markup=source
+            def setbackgroundcolor(self,*args):pass
+        node._native=Web()
+        backend.nodes=[node]
+        backend.apply_text_style("title")
+        self.assertIn("font-size:26px",node._native.markup)
+        backend.apply_text_style("caption")
+        self.assertIn("font-size:12px",node._native.markup)
+
+
 class IconTests(unittest.TestCase):
     def test_catalog_covers_requested_categories(self):
         self.assertGreaterEqual(len(ICONS),200)
@@ -181,6 +207,27 @@ class CanvasWorldTests(unittest.TestCase):
             InfiniteCanvas(width=2048,height=2048)
         with self.assertRaises(ValueError):
             viewport.add_marker(float("inf"),0)
+
+    def test_repaint_coalesced_per_pan_and_zoom(self):
+        view=InfiniteCanvas(width=320,height=240)
+        redraws=[]
+        view._draw_viewport=lambda:redraws.append(1)
+        view.pan(32,12)
+        self.assertEqual(len(redraws),1)
+        view.zoom_at(1.5)
+        self.assertEqual(len(redraws),2)
+
+    def test_grid_scale_and_marker_validation(self):
+        for value in (0,1e-12,1e308,float("inf"),float("nan")):
+            with self.subTest(grid_step=value),self.assertRaises(ValueError):
+                InfiniteCanvas(grid_step=value)
+        view=InfiniteCanvas(width=128,height=128)
+        with self.assertRaises(ValueError):view.add_marker(1,1,role="not_a_role")
+        with self.assertRaises(ValueError):view.add_marker(1,1,radius=0)
+        payload=bytearray(128*128*4)
+        c=Canvas(payload,128,128)
+        view.render_to(c)
+        c.close()
 
     def test_touch_pan_and_pinching(self):
         view=InfiniteCanvas(width=320,height=240)
