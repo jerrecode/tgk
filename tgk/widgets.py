@@ -117,8 +117,14 @@ class Widget(EventDispatcher):
         if isinstance(self,Slider) and name in ('value','min','max','step'):
             if self._slider_draw is not None:
                 self._slider_draw()
-        if name in ('theme','colors','background_color','text_color'):
+        if name in ('theme','colors','background_color','text_color',
+                    'text_style','text_size','font_weight','font_family','italic',
+                    'underline','strike','text_align','line_height','font_color_role'):
             if self._theme_hook is not None:self._theme_hook()
+        if name=='visible' and n is not None and hasattr(n,'setvisibility'):
+            n.setvisibility(2 if value else 0)
+        if name=='current' and getattr(self,'_sync_views',None):
+            self._sync_views()
     def _read_image(self):
         from pathlib import Path
         path=Path(getattr(self,'source',''))
@@ -230,7 +236,7 @@ class _ClockHandle:
 Clock=_Clock()
 
 class TermuxBackend:
-    def __init__(self, tg=None, theme=None):
+    def __init__(self, tg=None, theme=None, text_style=None, window_mode='normal'):
         if tg is None:
             try: import termuxgui as tg
             except ImportError as exc:
@@ -238,8 +244,14 @@ class TermuxBackend:
         self.tg=tg
         self.connection=None; self.activity=None;self.nodes=[]
         self._slider_resources=[]
+        self._canvas_resources=[]
+        if window_mode not in ('normal','dialog','overlay'):
+            raise ValueError("window_mode must be normal, dialog or overlay")
+        self.window_mode=window_mode
         from .theme import resolve_theme, get_theme
+        from .typography import resolve_text_style,get_text_style
         self.theme=resolve_theme(theme or get_theme())
+        self.text_style=resolve_text_style(text_style or get_text_style())
 
     def _node_theme(self,node):
         from .theme import resolve_theme
@@ -276,8 +288,46 @@ class TermuxBackend:
         if foreground is not None:
             setter=getattr(native,'settextcolor',None)
             if callable(setter):setter(tgui_color(foreground))
+        from .advanced import InfiniteCanvas,RichTextLabel
+        if isinstance(node,(Label,TextInput)):
+            self._paint_text(node,selected)
+        if isinstance(node,RichTextLabel):
+            native.setdata(node.html())
         if isinstance(node,Slider) and node._slider_draw is not None:
             node._slider_draw()
+        if isinstance(node,InfiniteCanvas) and node._draw_viewport is not None:
+            node._draw_viewport()
+
+    def _paint_text(self,node,selected):
+        from .typography import resolve_text_style
+        from .theme import tgui_color
+        style=resolve_text_style(getattr(node,'text_style',None) or self.text_style)
+        options={}
+        for field,override in (('family','font_family'),('size','text_size'),
+                               ('weight','font_weight'),('italic','italic'),
+                               ('underline','underline'),('strike','strike'),
+                               ('align','text_align'),('line_height','line_height'),
+                               ('role','font_color_role')):
+            if hasattr(node,override):
+                options[field]=getattr(node,override)
+        if options:style=style.override(**options)
+        native=node._native
+        if native is not None:
+            setsize=getattr(native,'settextsize',None)
+            if callable(setsize):
+                # Label.font_size predates presets; text_size/text_style is explicit.
+                legacy=getattr(node,'font_size',None)
+                size=legacy if legacy not in (None,16) and 'size' not in options and not hasattr(node,'text_style') else style.size
+                setsize(int(size))
+            if not hasattr(node,'text_color'):
+                setter=getattr(native,'settextcolor',None)
+                if callable(setter):setter(tgui_color(selected[style.role]))
+        return style
+
+    def apply_text_style(self,style=None):
+        from .typography import resolve_text_style
+        if style is not None:self.text_style=resolve_text_style(style)
+        for node in tuple(self.nodes):self._paint_node(node)
 
     def apply_theme(self,theme=None):
         """Recolor existing Views and redraw sliders, preserving local overrides."""
@@ -286,8 +336,38 @@ class TermuxBackend:
         for node in tuple(self.nodes):self._paint_node(node)
 
     def _make(self,node,parent):
+        from .advanced import ScreenManager,TabbedPanel,Popup,RichTextLabel,InfiniteCanvas
         tg=self.tg;a=self.activity
-        if isinstance(node,BoxLayout):
+        tab_content=None
+        if isinstance(node,TabbedPanel):
+            native=tg.LinearLayout(a,parent,vertical=True)
+            node._tab_bar=tg.TabLayout(a,native)
+            node._tab_bar.setlist([c.title for c in node.children])
+            tab_content=tg.FrameLayout(a,native)
+            tab_content.setheight(0)
+            tab_content.setlinearlayoutparams(1)
+        elif isinstance(node,ScreenManager):
+            native=tg.FrameLayout(a,parent)
+        elif isinstance(node,RichTextLabel):
+            native=tg.WebView(a,parent)
+            native.setheight(int(getattr(node,'height',120)))
+            native.setdata(node.html())
+        elif isinstance(node,InfiniteCanvas):
+            native=tg.ImageView(a,parent)
+            native.sendtouchevent(True)
+            native.setdimensions(node.width,node.height)
+            buffer=tg.Buffer(self.connection,node.width,node.height)
+            native.setbuffer(buffer)
+            memory=buffer.__enter__()
+            try:
+                from .canvas import Canvas
+                canvas=Canvas(memory,node.width,node.height)
+            except BaseException:
+                buffer.__exit__(None,None,None)
+                raise
+            self._canvas_resources.append((node,buffer,canvas))
+            node._draw_viewport=lambda: self._draw_canvas(node,buffer,canvas)
+        elif isinstance(node,BoxLayout):
             native=tg.LinearLayout(a,parent,vertical=node.orientation=='vertical')
         elif isinstance(node,GridLayout):
             cols=int(node.cols or max(1,(len(node.children)+int(node.rows)-1)//int(node.rows)))
@@ -338,6 +418,8 @@ class TermuxBackend:
         else:raise NotImplementedError(f'{type(node).__name__} has no native renderer')
         node._native=native;self.nodes.append(node)
         node._theme_hook=lambda: self.apply_theme()
+        if isinstance(node,ScreenManager):
+            node._sync_views=node._sync
         if isinstance(node,Slider):node._effective_theme=self._node_theme(node)
         if isinstance(node,Slider):node._slider_draw()
         if isinstance(node,Label):native.settextsize(int(node.font_size))
@@ -383,9 +465,21 @@ class TermuxBackend:
                                        rows,cols,ar,ac)
         if isinstance(node,BoxLayout) and node.padding:
             native.setmargin(int(node.padding if isinstance(node.padding,(int,float)) else node.padding[0]))
+        if isinstance(node,Popup):
+            native.setvisibility(2 if node.visible else 0)
         self._paint_node(node)
-        for child in node.children:self._make(child,native)
+        for child in node.children:self._make(child,tab_content if tab_content is not None else native)
+        if isinstance(node,ScreenManager):
+            node._sync()
+            if isinstance(node,TabbedPanel) and node._tab_bar is not None and node.children:
+                node._tab_bar.selecttab([x.name for x in node.children].index(node.current))
         return native
+    @staticmethod
+    def _draw_canvas(node,buffer,canvas):
+        node.render_to(canvas)
+        buffer.blit()
+        if node._native is not None:node._native.refresh()
+
     @staticmethod
     def _draw_slider(node,buffer,canvas):
         from .canvas import rgba
@@ -460,15 +554,30 @@ class TermuxBackend:
     def render(self,root):
         return self._make(root,None)
     def event(self,e):
+        from .advanced import TabbedPanel,InfiniteCanvas
         if e.type=='back':self.activity.finish();return
         if e.type=='destroy':return
         if e.type not in ('click','text','itemselected','touch'):return
         match=e.value.get('id')
+        if e.type=='itemselected':
+            for parent in self.nodes:
+                if not isinstance(parent,TabbedPanel) or match!=parent._tab_bar:
+                    continue
+                value=e.value.get('selected')
+                try:index=int(value)
+                except (TypeError,ValueError,OverflowError):return
+                if not 0<=index<len(parent.children):return
+                parent._tab_syncing=True
+                try:parent.switch(parent.children[index].name)
+                finally:parent._tab_syncing=False
+                return
         for node in self.nodes:
             # Termux:GUI Python bindings implement native view == numerical ID.
             if match!=node._native:continue
             if e.type=='touch' and isinstance(node,Slider):
                 self._slider_touch(node,e)
+            elif e.type=='touch' and isinstance(node,InfiniteCanvas):
+                node._touch(e)
             elif e.type=='itemselected' and isinstance(node,Spinner):
                 node.text=str(e.value.get('selected',''))
             elif e.type=='click':
@@ -487,7 +596,10 @@ class TermuxBackend:
     def run(self,root,on_start=None):
         with self.tg.Connection() as c:
             self.connection=c
-            self.activity=self.tg.Activity(c,intercept=True)
+            options={'intercept':True}
+            if self.window_mode=='dialog':options['dialog']=True
+            if self.window_mode=='overlay':options['overlay']=True
+            self.activity=self.tg.Activity(c,**options)
             try:
                 from .theme import apply_activity_theme
                 apply_activity_theme(self.activity,self.theme)
@@ -511,11 +623,18 @@ class TermuxBackend:
                     canvas.close()
                     buffer.__exit__(None,None,None)
                 self._slider_resources.clear()
+                for viewport,buffer,canvas in reversed(self._canvas_resources):
+                    viewport._draw_viewport=None
+                    canvas.close()
+                    buffer.__exit__(None,None,None)
+                self._canvas_resources.clear()
                 self.nodes.clear()
                 for node in root.walk():
                     node._native=None
                     node._theme_hook=None
                     node._effective_theme=None
+                    if hasattr(node,'_sync_views'):node._sync_views=None
+                    if hasattr(node,'_tab_bar'):node._tab_bar=None
                 self.activity=None
                 self.connection=None
 
@@ -523,9 +642,13 @@ class App(EventDispatcher):
     _running_app=None
     def __init__(self,**kwargs):
         from .theme import resolve_theme,get_theme
+        from .typography import resolve_text_style,get_text_style
         selected=kwargs.pop('theme',None)
+        typography=kwargs.pop('text_style',None)
+        self.window_mode=kwargs.pop('window_mode','normal')
         super().__init__(**kwargs);self.root=None;self._backend=None
         self.theme=resolve_theme(selected or get_theme())
+        self.text_style=resolve_text_style(typography or get_text_style())
 
     def set_theme(self,theme=None,**colors):
         """Switch a running application's palette without rebuilding its tree."""
@@ -533,6 +656,11 @@ class App(EventDispatcher):
         self.theme=resolve_theme(theme or self.theme,colors)
         if self._backend is not None:self._backend.apply_theme(self.theme)
         return self.theme
+    def set_text_style(self,style='body',**overrides):
+        from .typography import resolve_text_style
+        self.text_style=resolve_text_style(style,**overrides)
+        if self._backend:self._backend.apply_text_style(self.text_style)
+        return self.text_style
     @classmethod
     def get_running_app(cls):return App._running_app
     def build(self):return None
@@ -547,7 +675,8 @@ class App(EventDispatcher):
                 from .kv import Builder
                 self.root=Builder.load_file(type(self).__name__.removesuffix('App').lower()+'.kv')
             if not isinstance(self.root,Widget):raise TypeError('App.build must return a Widget')
-            self._backend=TermuxBackend(theme=self.theme)
+            self._backend=TermuxBackend(theme=self.theme,text_style=self.text_style,
+                                        window_mode=self.window_mode)
             self._backend.run(self.root,self.on_start)
         finally:
             try:self.on_stop()
