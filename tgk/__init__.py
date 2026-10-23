@@ -39,6 +39,12 @@ def __getattr__(name):
         result=getattr(import_module('.icons',__name__),name)
         globals()[name]=result
         return result
+    if name in ('Limits','TransferResult','BoundedPool','transfer','copy_file',
+                'hash_file','download','ffprobe'):
+        from importlib import import_module
+        result=getattr(import_module('.io_pipeline',__name__),name)
+        globals()[name]=result
+        return result
     if name=='Builder':
         from .kv import Builder
         globals()[name]=Builder
