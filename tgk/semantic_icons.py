@@ -10,7 +10,7 @@ from html import escape
 
 # Bump when generated SVG geometry materially changes. Install upgrades only
 # untouched TGK-owned catalogs; user-customized catalogs remain intact.
-ICON_GEOMETRY_REVISION = 2
+ICON_GEOMETRY_REVISION = 3
 
 # Individual line-art motifs. Deliberately distinct from file-extension recipes.
 _PATHS = {
@@ -20,7 +20,7 @@ _PATHS = {
     "select_all": "M6 5H20V19H6Z M2 9V2H16 M9 12L12 15L17 9",
     "select_none": "M6 5H20V19H6Z M2 9V2H16 M9 12H17",
     "invert_selection": "M4 4H12V12H4Z M12 12H20V20H12Z M15 3L19 3L19 7 M9 21H5V17",
-    "copy": "M8 7H20V21H8Z M4 17H3V3H16V7 M11 11H17",
+    "copy": "M9 7V3H17L21 7V16H16 M17 3V7H21 M3 8H11L15 12V22H3Z M11 8V12H15",
     "paste": "M9 4H15V6H19V21H5V6H9Z M9 3H15V8H9Z M9 12H15 M9 16H15",
     "cut": "M9 7A3 3 0 1 1 3 7A3 3 0 0 1 9 7 M9 17A3 3 0 1 1 3 17A3 3 0 0 1 9 17 M9 9L20 21 M9 15L20 3 M16 17L20 21",
     "move": "M12 2V22 M2 12H22 M8 6L12 2L16 6 M8 18L12 22L16 18 M6 8L2 12L6 16 M18 8L22 12L18 16",
@@ -176,13 +176,12 @@ _PATHS = {
     "cloud": "M6 19H19A4 4 0 0 0 19 11A7 7 0 0 0 5 12A4 4 0 0 0 6 19",
     "offline": "M3 3L21 21 M6 10Q12 5 18 10 M9 14Q12 12 15 14 M12 19V19.5",
     "online": "M12 2A10 10 0 1 1 12 22A10 10 0 1 1 12 2 M12 8A4 4 0 1 1 12 16A4 4 0 1 1 12 8",
-    "sync": "M3 8V5H11L13 7V16H3Z M9 3H17L19 5V13H9Z",
 }
+_PATHS["sync"] = _PATHS["copy"]
 # Accented secondary geometry where it improves readability without changing
 # the fundamental pictogram (e.g. refresh arrows and terminal prompt).
 _ACCENTS = {
     "refresh": "M6 2V6H10 M18 22V18H14",
-    "sync": "M17 16A4 4 0 0 1 22 19 M22 19V16 M22 19H19 M22 20A4 4 0 0 1 17 23 M17 23V20 M17 23H20",
     "run": "M6 9L10 12L6 15 M12 16H18",
 }
 # All action/navigation/media/view names must explicitly select a pictogram.
@@ -339,8 +338,10 @@ _assign("left", "back left arrow_left")
 _assign("chevron_left", "chevron_left")
 _assign("right", "right arrow_right forward")
 _assign("chevron_right", "chevron_right")
-_assign("up", "up arrow_up chevron_up")
-_assign("down", "down arrow_down chevron_down")
+_assign("up", "up arrow_up")
+_assign("collapse", "chevron_up")
+_assign("down", "down arrow_down")
+_assign("expand", "chevron_down")
 _assign("grid", "dashboard grid_view")
 _assign("menu", "list_view")
 _assign("tree", "tree")
@@ -365,13 +366,16 @@ SEMANTIC_ICONS = frozenset(_ICON_MOTIF)
 
 
 def render_semantic_svg(name: str, *, size: int = 64, stroke: str = "#D5EFFF",
-                        accent: str = "#57DCED", background: str | None = None) -> str:
+                        accent: str = "#57DCED", background: str | None = None,
+                        stroke_width: float = 1.7) -> str:
     """Render only an explicit vector icon; never substitute a generic badge."""
     from .theme import normalize_color
     if name not in _ICON_MOTIF:
         raise KeyError("no semantic geometry: " + str(name))
     if type(size) is not int or not 8 <= size <= 4096:
         raise ValueError("size out of range")
+    if type(stroke_width) not in (int, float) or not 0 < stroke_width <= 32:
+        raise ValueError("invalid stroke width")
     color = normalize_color(stroke)
     accent_color = normalize_color(accent)
     motif = _ICON_MOTIF[name]
@@ -384,13 +388,21 @@ def render_semantic_svg(name: str, *, size: int = 64, stroke: str = "#D5EFFF",
     ]
     if background is not None:
         result.append(f'<rect width="64" height="64" fill="{normalize_color(background)}"/>')
-    result.append('<g transform="translate(4 4) scale(2.333333)" fill="none" '
-                  f'stroke="{color}" stroke-width="1.7" '
+    result.append('<g transform="translate(4 4) scale(2.3333333333333335)" fill="none" '
+                  f'stroke="{color}" stroke-width="{stroke_width:.12g}" '
                   'stroke-linecap="round" stroke-linejoin="round">')
     path_fill = color if name == "star_filled" else "none"
     result.append(f'<path d="{escape(outline, quote=True)}" fill="{path_fill}"/>')
     if motif in _ACCENTS:
         result.append(f'<path d="{escape(_ACCENTS[motif], quote=True)}" '
                       f'stroke="{accent_color}"/>')
+    if motif == "sync":
+        # Reuse the refresh pictogram at exactly one quarter size, clear of
+        # both document silhouettes, rather than inventing another abbreviation.
+        result.append('<g transform="translate(16.5 16.5) scale(0.25)" '
+                      f'stroke="{accent_color}">')
+        for data in (_PATHS["refresh"], _ACCENTS["refresh"]):
+            result.append(f'<path d="{escape(data, quote=True)}"/>')
+        result.append('</g>')
     result.append('</g></svg>')
     return ''.join(result)

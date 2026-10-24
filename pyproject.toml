@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tgk"
-version = "0.6.10"
+version = "0.6.11"
 description = "Native Termux:GUI widgets, C canvas, KV subset, and selective Kivy import bridge"
 readme = "README.md"
 requires-python = ">=3.10"

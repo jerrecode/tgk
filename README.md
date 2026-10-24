@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jerrecode/tgk/actions/workflows/ci.yml/badge.svg)](https://github.com/jerrecode/tgk/actions/workflows/ci.yml)
 
-**Experimental v0.6.10:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
+**Experimental v0.6.11:** C-accelerated RGBA rasterizer, native Android controls using `termuxgui`, declarative KV subset, and an **opt-in reversible interpreter startup hook** for selected Kivy imports. This is **not** complete upstream Kivy, and Android hardware validation remains required.
 
 The [branch audit](docs/branch-audit-20261023.md) documents every retained
 feature/fix head and which changes were already integrated, superseded or
@@ -953,3 +953,17 @@ target minimum, unless `allow_small_touch_target=True` is specified.
 Use `tgk layout-plan --columns 6 --span-units 12 --width-dp 393
 --height-dp 852 --json` with TGK Tools >=0.6.3 to preview the same grid
 mapping without starting the Android UI.
+
+## Icon review fixes in 0.6.11
+
+Purpose-specific SVG controls honor the public `tgk.icons.svg(color=..., stroke=...)`
+options, including secondary refresh arrows and the terminal prompt. Chevron
+controls remain distinct from shafted arrows. File-extension labels are unchanged.
+
+Automatic upgrades of pristine, old generated catalogs now check the original
+directory again after staging. Concurrent edits/additions cancel the upgrade and
+restore the original. Successful automatic upgrades retain the previous directory
+at the JSON receipt's `previous_output` path (a `.tgk-icons-backup-*` sibling),
+so writes from already-open editor handles remain recoverable. Inspect or archive
+that backup before deleting it yourself; it occupies approximately one old catalog's
+size. Explicit `icons-build --overwrite` still means replace that destination.
