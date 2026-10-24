@@ -42,12 +42,20 @@ class Canvas:
         self.stride = int(stride if stride is not None else 4*width)
         if self.width<=0 or self.height<=0 or self.stride<4*self.width:
             raise ValueError('invalid canvas dimensions')
+        self._s = _Surface()
         # memoryview object, bytearray and mmap all provide writable buffers.
         self._source = (ct.c_uint8 * (self.stride*self.height)).from_buffer(buffer)
-        self._s = _Surface(); self._c = _lib()
-        if self._c.tgk_surface_init(ct.byref(self._s), self._source,
-                                     self.width, self.height, self.stride):
-            raise ValueError('cannot initialize surface')
+        try:
+            self._c = _lib()
+            if self._c.tgk_surface_init(ct.byref(self._s), self._source,
+                                         self.width, self.height, self.stride):
+                raise ValueError('cannot initialize surface')
+        except BaseException:
+            # A retained constructor traceback also retains self. Release its
+            # export now so the caller can close the underlying native buffer.
+            self._s.pixels = None
+            self._source = None
+            raise
     def _require_open(self):
         if self._source is None:raise RuntimeError('canvas is closed')
     def clear(self,color):

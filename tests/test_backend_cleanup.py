@@ -216,5 +216,37 @@ class BackendCleanupTests(unittest.TestCase):
         self.assertIsNone(self.backend.activity)
         self.assertEqual(self.calls,[('connection',None)])
 
+    def test_real_canvas_load_error_releases_unregistered_buffer(self):
+        for node in (Slider(),InfiniteCanvas(width=32,height=32)):
+            with self.subTest(widget=type(node).__name__):
+                self.setUp()
+                original=OSError('native rasterizer could not load')
+                stderr=io.StringIO();stdout=io.StringIO()
+                with patch('tgk.canvas._lib',side_effect=original):
+                    with redirect_stdout(stdout),redirect_stderr(stderr):
+                        with self.assertRaises(OSError) as raised:
+                            self.backend.run(node)
+                self.assertIs(raised.exception,original)
+                self.assertEqual(len(self.connection_errors),1)
+                kind,error,traceback=self.connection_errors[0]
+                self.assertIs(kind,OSError)
+                self.assertIs(error,original)
+                # Keep the original traceback (and partially initialized
+                # Canvas) alive while checking that buffer exit succeeded.
+                self.assertIsNotNone(traceback)
+                self.assertEqual(self.calls,[('buffer',0),('connection',None)])
+                self.assertEqual(len(self.buffers),1)
+                self.assertTrue(self.buffers[0].closed)
+                self.buffers[0].data.extend(b'no live export')
+                self.assertEqual(stderr.getvalue(),'')
+                self.assertEqual(stdout.getvalue(),'')
+                self.assertEqual(self.backend._slider_resources,[])
+                self.assertEqual(self.backend._canvas_resources,[])
+                self.assertEqual(self.backend.nodes,[])
+                self.assertEqual(self.backend._native_index,{})
+                self.assertIsNone(self.backend.connection)
+                self.assertIsNone(self.backend.activity)
+                self.assertIsNone(node._native)
+
 
 if __name__=='__main__':unittest.main()
