@@ -42,8 +42,8 @@ class PurposeBuiltIconTests(unittest.TestCase):
                    ("refresh", "sync", "copy", "cut", "run",
                     "play", "pause", "stop")}
         self.assertIn("A8 8", samples["refresh"])  # two curved cyclic arrows
-        self.assertIn("M3 8V5", samples["sync"])     # overlapping documents
-        self.assertIn("M8 7H20", samples["copy"])   # overlapping documents
+        self.assertIn("M3 8H11", samples["sync"])   # foreground document
+        self.assertIn("M9 7V3", samples["copy"])    # rear document at upper right
         self.assertIn("A3 3", samples["cut"])       # scissor handles
         self.assertIn("M3 4H21V20H3Z", samples["run"])  # terminal window
         self.assertIn("M6 9L10 12L6 15", samples["run"])  # >_ prompt

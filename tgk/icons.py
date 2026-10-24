@@ -205,7 +205,10 @@ def svg(name,size=24,color="#FFFFFF",stroke=2):
     fill=normalize_color(color)
     from .semantic_icons import SEMANTIC_ICONS, render_semantic_svg
     if name in SEMANTIC_ICONS:
-        return render_semantic_svg(name,size=size,stroke=fill)
+        # Public stroke units belong to the original 24-unit SVG viewport.
+        # Semantic geometry occupies 56/64 units, so compensate for its scale.
+        return render_semantic_svg(name,size=size,stroke=fill,accent=fill,
+                                   stroke_width=stroke*8/7)
     key={"folder_open":"folder","file_text":"file","image":"file","video":"file",
          "audio":"file","previous":"back","next":"forward","cancel":"close",
          "confirm":"check","zoom_reset":"search"}.get(name,name)

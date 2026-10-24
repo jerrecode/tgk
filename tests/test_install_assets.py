@@ -8,6 +8,7 @@ import unittest
 
 from tgk.config import DEFAULT_CONFIG
 from tgk.icon_builder import recipe_names
+from tgk.semantic_icons import ICON_GEOMETRY_REVISION
 from tgk.install_assets import initialize_icon_assets,main
 
 
@@ -48,7 +49,7 @@ class InstallAssetTests(unittest.TestCase):
         directory = self.root / "icons"
         manifest_path = directory / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
-        self.assertEqual(manifest["geometry_revision"], 2)
+        self.assertEqual(manifest["geometry_revision"], ICON_GEOMETRY_REVISION)
         # Simulate a verified v0.6.10 legacy catalog: same generated contents,
         # but without semantic icon geometry revision information.
         del manifest["geometry_revision"]
@@ -94,6 +95,52 @@ class InstallAssetTests(unittest.TestCase):
         self.assertEqual(initialize_icon_assets(
             self.root, settings=self.settings)["status"], "preserved")
         self.assertTrue(link.is_symlink())
+
+    def test_upgrade_preserves_changes_made_while_generating_replacement(self):
+        from tgk.icon_builder import render_svg
+        for change in ('edit', 'add', 'symlink'):
+            with self.subTest(change=change), TemporaryDirectory() as directory:
+                root=Path(directory)
+                initialize_icon_assets(root,settings=self.settings)
+                folder=root/'icons'
+                manifest_path=folder/'manifest.json'
+                manifest=json.loads(manifest_path.read_text())
+                manifest['geometry_revision']=0
+                manifest_path.write_text(json.dumps(manifest))
+                edited=False
+                def render(name,**kwargs):
+                    nonlocal edited
+                    if not edited:
+                        edited=True
+                        icon=folder/'svg/play.svg'
+                        if change=='edit':icon.write_text('my concurrent edit')
+                        elif change=='add':(folder/'svg/user_owned.svg').write_text('my own icon')
+                        else:
+                            icon.unlink()
+                            icon.symlink_to(root/'external.svg')
+                    return render_svg(name,**kwargs)
+                with patch('tgk.icon_builder.render_svg',side_effect=render):
+                    result=initialize_icon_assets(root,settings=self.settings)
+                self.assertEqual(result['status'],'preserved')
+                if change=='edit':self.assertEqual((folder/'svg/play.svg').read_text(),'my concurrent edit')
+                elif change=='add':self.assertEqual((folder/'svg/user_owned.svg').read_text(),'my own icon')
+                else:self.assertTrue((folder/'svg/play.svg').is_symlink())
+
+    def test_automatic_upgrade_keeps_original_for_already_open_editors(self):
+        initialize_icon_assets(self.root,settings=self.settings)
+        folder=self.root/'icons'
+        manifest_path=folder/'manifest.json'
+        manifest=json.loads(manifest_path.read_text())
+        manifest['geometry_revision']=0
+        manifest_path.write_text(json.dumps(manifest))
+        with (folder/'svg/play.svg').open('r+b') as editor:
+            result=initialize_icon_assets(self.root,settings=self.settings)
+            editor.seek(0);editor.truncate();editor.write(b'late editor save');editor.flush()
+        self.assertEqual(result['status'],'refreshed')
+        previous=result.get('previous_output')
+        self.assertIsNotNone(previous,'automatic upgrades must retain a recoverable original')
+        self.assertEqual((Path(previous)/'svg/play.svg').read_bytes(),b'late editor save')
+        self.assertNotEqual((folder/'svg/play.svg').read_bytes(),b'late editor save')
 
     def test_symlinks_or_nondirectory_output_refused(self):
         dest=self.root/"icons"

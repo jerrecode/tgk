@@ -15,7 +15,7 @@ import re
 import stat
 
 from .config import _config_write_lock, config_home, load_config
-from .icon_builder import build_assets, recipe_names
+from .icon_builder import build_assets, recipe_names, CatalogChangedError
 from .semantic_icons import ICON_GEOMETRY_REVISION
 
 _ASSET_NAME = re.compile(
@@ -156,17 +156,27 @@ def initialize_icon_assets(root=None, *, settings=None, raster=None):
                         "created": False, "reason": "geometry already current"}
             # Old pristine catalogs are safe to refresh. No user edits exist.
             overwrite = True
-        result = build_assets(parent, raster=raster, overwrite=overwrite,
-                              low=icon_settings["low"], mid=icon_settings["mid"],
-                              high=icon_settings["high"],
-                              max_icons=icon_settings["max_icons"])
-        return {"path": result["output"],
+        def unchanged(moved):
+            return _manifest_if_untouched(moved) == manifest
+        try:
+            result = build_assets(parent, raster=raster, overwrite=overwrite,
+                                  low=icon_settings["low"], mid=icon_settings["mid"],
+                                  high=icon_settings["high"],
+                                  max_icons=icon_settings["max_icons"],
+                                  _replace_guard=unchanged if overwrite else None)
+        except CatalogChangedError:
+            return {"path": str(target), "status": "preserved", "created": False,
+                    "reason": "catalog changed during generation; original restored"}
+        receipt={"path": result["output"],
                 "status": "refreshed" if overwrite else "created",
                 "created": not overwrite, "count": result["count"],
                 "raster": raster, "svg_files": result["svg_files"],
                 "png_files": result["png_files"],
                 "jpeg_files": result["jpeg_files"],
                 "ico_files": result["ico_files"]}
+        if "previous_output" in result:
+            receipt["previous_output"]=result["previous_output"]
+        return receipt
 
 
 def main(argv=None):

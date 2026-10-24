@@ -300,14 +300,22 @@ def _raster_backend():
     return cairosvg,Image
 
 
+class CatalogChangedError(RuntimeError):
+    """An automatic replacement was cancelled to preserve concurrent edits."""
+
+
 def build_assets(output_root,*,names=None,raster=None,overwrite=False,
-                 low=None,mid=None,high=None,max_icons=None):
+                 low=None,mid=None,high=None,max_icons=None,_replace_guard=None):
     """Build EVERYTHING in staging first; atomically publish only on success.
 
     output_root/icons/{svg,ico,low_res,mid_res,high_res}. The raster folders
     exist but remain empty for a deterministic SVG-only run.
+    An internal automatic-upgrade guard validates the moved old directory;
+    guarded successful replacements retain it for already-open editor handles.
     """
     from .config import load_config
+    if _replace_guard is not None and not callable(_replace_guard):
+        raise TypeError("replacement guard must be callable")
     configured=load_config()["icons"]
     raster=configured["raster"] if raster is None else raster
     if type(raster) is not bool:raise ValueError("raster must be boolean")
@@ -394,16 +402,26 @@ def build_assets(output_root,*,names=None,raster=None,overwrite=False,
             backup=Path(tempfile.mkdtemp(prefix=".tgk-icons-backup-",dir=root))
             backup.rmdir()
             os.replace(target,backup)
-        try:os.replace(stage,target)
+        try:
+            if _replace_guard is not None:
+                if backup is None or not _replace_guard(backup):
+                    raise CatalogChangedError("icon catalog changed during generation")
+            os.replace(stage,target)
         except BaseException:
-            if backup is not None:os.replace(backup,target)
+            if backup is not None:
+                try:os.replace(backup,target)
+                except OSError as exc:
+                    raise RuntimeError("Could not restore original icons; retained at "+str(backup)) from exc
             raise
         stage=None
-        if backup is not None:shutil.rmtree(backup)
-        return {"output":str(target),"count":len(selection),"raster":raster,
+        if backup is not None and _replace_guard is None:shutil.rmtree(backup)
+        result={"output":str(target),"count":len(selection),"raster":raster,
                 "svg_files":len(selection),"png_files":len(selection)*3 if raster else 0,
                 "jpeg_files":len(selection)*3 if raster else 0,
                 "ico_files":len(selection) if raster else 0}
+        if backup is not None and _replace_guard is not None:
+            result["previous_output"]=str(backup)
+        return result
     finally:
         if stage is not None and stage.exists():shutil.rmtree(stage)
 
