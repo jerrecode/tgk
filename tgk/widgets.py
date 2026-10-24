@@ -618,7 +618,9 @@ class TermuxBackend:
                 from .canvas import Canvas
                 canvas=Canvas(memory,node.width,node.height)
             except BaseException:
-                buffer.__exit__(None,None,None)
+                try:buffer.__exit__(None,None,None)
+                except BaseException:
+                    log.exception('Secondary backend cleanup failure')
                 raise
             self._canvas_resources.append((node,buffer,canvas))
             node._draw_viewport=lambda: self._draw_canvas(node,buffer,canvas)
@@ -660,7 +662,9 @@ class TermuxBackend:
                 from .canvas import Canvas
                 canvas=Canvas(memory,512,72)
             except BaseException:
-                buffer.__exit__(None,None,None)
+                try:buffer.__exit__(None,None,None)
+                except BaseException:
+                    log.exception('Secondary backend cleanup failure')
                 raise
             self._slider_resources.append((node,buffer,canvas))
             node._slider_draw=lambda: self._draw_slider(node,buffer,canvas)
@@ -904,9 +908,56 @@ class TermuxBackend:
                 object.__setattr__(node,'_native_text_event',str(val))
                 try:node.text=str(val)
                 finally:node.__dict__.pop('_native_text_event',None)
+    def _cleanup(self,root,error,connection):
+        """Attempt all shutdown work, retaining the first/original failure."""
+        def attempt(operation,*args):
+            nonlocal error
+            try:operation(*args)
+            except BaseException as exc:
+                if error is None:error=exc
+                else:
+                    log.error('Secondary backend cleanup failure',
+                              exc_info=(type(exc),exc,exc.__traceback__))
+
+        # Disable every Activity callback and gesture before any native close.
+        attempt(Clock.reset)
+        for slider,_,_ in self._slider_resources:
+            attempt(setattr,slider,'_slider_draw',None)
+            attempt(setattr,slider,'_drag_pointer',None)
+        for viewport,_,_ in self._canvas_resources:
+            attempt(setattr,viewport,'_draw_viewport',None)
+            attempt(setattr,viewport,'_touch_points',{})
+            attempt(setattr,viewport,'_last_pinch_distance',None)
+        for node in root.walk():
+            for name in ('_native','_theme_hook','_effective_theme'):
+                attempt(setattr,node,name,None)
+            attempt(node._applied_native_style.clear)
+            for name in ('_sync_views','_tab_bar','_inherited_text_style'):
+                if hasattr(node,name):attempt(setattr,node,name,None)
+        attempt(self._native_index.clear)
+        attempt(self._tab_index.clear)
+        attempt(self.nodes.clear)
+        # Canvas.close relinquishes C's exported mmap reference before exit.
+        for resources in (self._slider_resources,self._canvas_resources):
+            for _,buffer,canvas in reversed(resources):
+                attempt(canvas.close)
+                attempt(buffer.__exit__,None,None,None)
+            attempt(resources.clear)
+        attempt(setattr,self,'activity',None)
+        attempt(setattr,self,'connection',None)
+        # A connection/service close must not mask an earlier failure.  Pass
+        # its exception details as with a context manager, but never suppress
+        # an original event/start error, even if __exit__ returns true.
+        attempt(connection.__exit__,type(error) if error is not None else None,
+                error,error.__traceback__ if error is not None else None)
+        return error
+
     def run(self,root,on_start=None):
-        with self.tg.Connection() as c:
-            self.connection=c
+        connection=self.tg.Connection()
+        self.connection=connection.__enter__()
+        c=self.connection
+        error=None
+        try:
             options={'intercept':True}
             if self.window_mode=='dialog':options['dialog']=True
             if self.window_mode=='overlay':options['overlay']=True
@@ -923,54 +974,29 @@ class TermuxBackend:
                     raise
                 log.warning('Termux:GUI overlay unavailable (%s); using normal Activity',exc)
                 self.activity=self.tg.Activity(c,intercept=True)
-            try:
-                if self.orientation_mode in ('portrait','landscape'):
-                    change=getattr(self.activity,'setorientation',None)
-                    if callable(change):change(self.orientation_mode)
-                self.refresh_screen_metrics()
-                from .theme import apply_activity_theme
-                apply_activity_theme(self.activity,self.theme)
-                self.render(root)
-                if on_start: on_start()
-                running=True
-                while running and not self._stop_requested:
-                    event=c.checkevent()
-                    if event is not None:
-                        self.event(event)
-                        if event.type=='destroy' and event.value.get('finishing',False):
-                            running=False
-                    Clock.tick(max_callbacks=getattr(self,'clock_callbacks_per_tick',128))
-                    if event is None and not self._stop_requested:
-                        time.sleep(getattr(self,'idle_sleep_seconds',0.01))
-            finally:
-                # Cancel callbacks associated with this Activity before closing
-                # native views, avoiding stale timer writes after app shutdown.
-                Clock.reset()
-                # Relinquish C's exported mmap reference before closing the buffer.
-                for slider,buffer,canvas in reversed(self._slider_resources):
-                    slider._slider_draw=None
-                    slider._drag_pointer=None
-                    canvas.close()
-                    buffer.__exit__(None,None,None)
-                self._slider_resources.clear()
-                self._native_index.clear()
-                self._tab_index.clear()
-                for viewport,buffer,canvas in reversed(self._canvas_resources):
-                    viewport._draw_viewport=None
-                    canvas.close()
-                    buffer.__exit__(None,None,None)
-                self._canvas_resources.clear()
-                self.nodes.clear()
-                for node in root.walk():
-                    node._native=None
-                    node._theme_hook=None
-                    node._effective_theme=None
-                    node._applied_native_style.clear()
-                    if hasattr(node,'_sync_views'):node._sync_views=None
-                    if hasattr(node,'_tab_bar'):node._tab_bar=None
-                    if hasattr(node,'_inherited_text_style'):node._inherited_text_style=None
-                self.activity=None
-                self.connection=None
+            if self.orientation_mode in ('portrait','landscape'):
+                change=getattr(self.activity,'setorientation',None)
+                if callable(change):change(self.orientation_mode)
+            self.refresh_screen_metrics()
+            from .theme import apply_activity_theme
+            apply_activity_theme(self.activity,self.theme)
+            self.render(root)
+            if on_start: on_start()
+            running=True
+            while running and not self._stop_requested:
+                event=c.checkevent()
+                if event is not None:
+                    self.event(event)
+                    if event.type=='destroy' and event.value.get('finishing',False):
+                        running=False
+                Clock.tick(max_callbacks=getattr(self,'clock_callbacks_per_tick',128))
+                if event is None and not self._stop_requested:
+                    time.sleep(getattr(self,'idle_sleep_seconds',0.01))
+        except BaseException as exc:
+            error=exc
+        finally:
+            error=self._cleanup(root,error,connection)
+        if error is not None:raise error.with_traceback(error.__traceback__)
 
 class App(EventDispatcher):
     _running_app=None

@@ -13,6 +13,22 @@ event handling, adaptive reflow, inset planning, configuration migrations,
 safe presets, caching and native C behavior with models/backend doubles.
 These checks cannot establish physical touch, keyboard or system bar behavior.
 
+## Host shutdown regression evidence, 2026-10-24
+
+Linux host regressions drive real `TermuxBackend.run` startup and event
+shutdown with fake Termux:GUI connections, views and buffers and the native C
+Canvas. They inject slider/canvas close, buffer exit, model style reset and
+connection exit failures. The checks verify that remaining cleanup runs,
+Activity callbacks and gesture state clear before resource closure, exported
+Canvas memory releases before buffer exit, native widget references and
+indexes clear, and the original startup/event exception (or first cleanup
+failure) survives while secondary cleanup errors are logged to stderr.
+Activity construction failures also clear backend connection/activity state.
+
+This is host regression coverage, not an Android service-failure, lifecycle,
+or framebuffer test on hardware. Background/resume, repeated open/close,
+service loss and physical input validation remain pending on a target device.
+
 ## Device setup and evidence
 
 On the target device, install a matching Termux:GUI Android application and
