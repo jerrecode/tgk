@@ -61,7 +61,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           zip -q -r "$GITHUB_WORKSPACE/tgk-icon-assets.zip" icons
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: tgk-layered-icon-pack
           path: tgk-icon-assets.zip
